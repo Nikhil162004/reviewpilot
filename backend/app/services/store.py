@@ -49,3 +49,25 @@ def dashboard_stats() -> dict:
         "critical_issues": sum(r["stats"].get("critical", 0) for r in reviews),
         "files_analyzed": sum(r["stats"].get("files_changed", 0) for r in reviews),
     }
+
+
+def admin_analytics() -> dict:
+    reviews = list_reviews(limit=500)
+    from app.services.auth_service import user_count
+
+    rule_counts: dict[str, int] = {}
+    category_counts: dict[str, int] = {}
+    for review in reviews:
+        for issue in review.get("issues", []):
+            rule_counts[issue["rule_id"]] = rule_counts.get(issue["rule_id"], 0) + 1
+            category_counts[issue["category"]] = category_counts.get(issue["category"], 0) + 1
+    top_rules = sorted(rule_counts.items(), key=lambda kv: -kv[1])[:8]
+    return {
+        "total_users": user_count(),
+        "total_reviews": len(reviews),
+        "average_score": round(sum(r["score"] for r in reviews) / len(reviews)) if reviews else 0,
+        "total_issues": sum(r["stats"].get("total_issues", 0) for r in reviews),
+        "critical_issues": sum(r["stats"].get("critical", 0) for r in reviews),
+        "top_rules": [{"rule_id": k, "count": v} for k, v in top_rules],
+        "issues_by_category": category_counts,
+    }

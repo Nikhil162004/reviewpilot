@@ -77,3 +77,30 @@ def fetch_pr_diff(url: str) -> tuple[str, str]:
 
     title = f"{owner}/{repo} #{number}: {meta.get('title', 'Pull request')}"
     return title, diff_text
+
+
+def post_pr_comment(token: str, pr_url: str, body_markdown: str) -> str:
+    """Post a review summary comment on a PR. Token is used once, never stored."""
+    owner, repo, number = parse_pr_url(pr_url)
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/issues/{number}/comments"
+    import json as _json
+
+    payload = _json.dumps({"body": body_markdown}).encode()
+    req = urllib.request.Request(
+        api_url, data=payload, method="POST",
+        headers={
+            "User-Agent": "pr-review-assistant/1.0",
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:  # noqa: S310 - fixed https host
+            comment = _json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = "check the token has pull-request write access" if exc.code in (401, 403, 404) else str(exc.code)
+        raise ValueError(f"GitHub rejected the comment ({detail}).") from exc
+    except urllib.error.URLError as exc:
+        raise ValueError("Could not reach GitHub. Check your network connection.") from exc
+    return comment.get("html_url", pr_url)

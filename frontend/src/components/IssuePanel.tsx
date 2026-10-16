@@ -36,10 +36,10 @@ export default function IssuePanel({ issues, selectedIssueId, onSelectIssue }: P
       </div>
       <div className="issue-list">
         {visible.length === 0 && <div className="empty"><strong>No issues at this severity</strong>Try another filter.</div>}
-        {visible.map((issue) => (
+        {visible.map((issue, idx) => (
           <article
             key={issue.id}
-            className={`issue ${issue.id === selectedIssueId ? "selected" : ""}`}
+            className={`issue ${issue.id === selectedIssueId ? "selected" : ""}`} style={{ animationDelay: `${Math.min(idx * 45, 400)}ms` }}
             onClick={() => onSelectIssue(issue)}
           >
             <div className="issue-top">

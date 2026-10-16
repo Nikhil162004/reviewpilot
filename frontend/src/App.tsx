@@ -3,7 +3,8 @@ import Editor from "@monaco-editor/react";
 import { motion } from "framer-motion";
 import {
   BarChart3, Code2, FileCode2, Gauge, GitPullRequest, HelpCircle, History as HistoryIcon,
-  LayoutDashboard, MessageSquareText, Play, Search, Sparkles, Wand2,
+  LayoutDashboard, LogIn, LogOut, MessageSquareText, Play, Printer, Search, Settings as SettingsIcon,
+  Share2, ShieldCheck, Sparkles, Users, Wand2,
 } from "lucide-react";
 import { CategoryBars, ScoreTrend, SeverityDonut, TopRules, estimatedEffort, qualityGate } from "./components/Charts";
 import CommandPalette, { type PaletteAction } from "./components/CommandPalette";
@@ -12,14 +13,17 @@ import IssuePanel from "./components/IssuePanel";
 import ScoreRing from "./components/ScoreRing";
 import Walkthrough from "./components/Walkthrough";
 import SyntaxEditor from "./components/SyntaxEditor";
-import { api } from "./lib/api";
+import { api, clearSession, getUser, setSession } from "./lib/api";
+import Landing from "./components/Landing";
+import AdminPanel from "./components/AdminPanel";
+import { explainLine } from "./lib/explain";
 import { SAMPLE_CLEAN, SAMPLE_CODE, SAMPLE_DIFF, SAMPLE_JS } from "./lib/sample";
 import type { DashboardStats, Issue, ReviewResult } from "./lib/types";
 
-type View = "workspace" | "dashboard" | "history" | "how";
+type View = "landing" | "workspace" | "dashboard" | "history" | "how" | "settings" | "admin" | "compare";
 type InputMode = "code" | "diff" | "github";
 type CenterMode = "editor" | "report";
-type RightTab = "issues" | "chat" | "metrics";
+type RightTab = "issues" | "chat" | "metrics" | "team";
 
 interface ChatMessage { role: "user" | "assistant"; text: string }
 interface PrItem { number: number; title: string; author: string; url: string; updated_at: string }
@@ -87,7 +91,32 @@ function exportReport(review: ReviewResult) {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>("workspace");
+  const [view, setView] = useState<View>(() => (localStorage.getItem("rp_visited") ? "workspace" : "landing"));
+  const [user, setUser] = useState(getUser());
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [theme, setTheme] = useState(localStorage.getItem("rp_theme") || "dark");
+  const [accent, setAccent] = useState(localStorage.getItem("rp_accent") || "#2dd4bf");
+  const [llmKey, setLlmKey] = useState(localStorage.getItem("rp_llm_key") || "");
+  const [llmProvider, setLlmProvider] = useState(localStorage.getItem("rp_llm_provider") || "groq");
+  const [deepReview, setDeepReview] = useState<string | null>(null);
+  const [deepLoading, setDeepLoading] = useState(false);
+  const [generatedTests, setGeneratedTests] = useState<{ code: string; name: string } | null>(null);
+  const [ghToken, setGhToken] = useState("");
+  const [ghPostOpen, setGhPostOpen] = useState(false);
+  const [ghPosting, setGhPosting] = useState(false);
+  const [historyQuery, setHistoryQuery] = useState("");
+  const [historyFilter, setHistoryFilter] = useState("all");
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [teamMembers, setTeamMembers] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("rp_team") || "[]"); } catch { return []; } });
+  const [newMember, setNewMember] = useState("");
+  const [assignments, setAssignments] = useState<Record<string, string>>(() => { try { return JSON.parse(localStorage.getItem("rp_assign") || "{}"); } catch { return {}; } });
+  const [issueComment, setIssueComment] = useState("");
+  const [issueComments, setIssueComments] = useState<Record<string, string[]>>(() => { try { return JSON.parse(localStorage.getItem("rp_comments") || "{}"); } catch { return {}; } });
+  const [explained, setExplained] = useState<{ line: number; text: string } | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [history, setHistory] = useState<ReviewResult[]>([]);
   const [current, setCurrent] = useState<ReviewResult | null>(null);
@@ -140,6 +169,22 @@ export default function App() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.setProperty("--accent", accent);
+    localStorage.setItem("rp_theme", theme);
+    localStorage.setItem("rp_accent", accent);
+  }, [theme, accent]);
+
+  // Public share links: /?share=<reviewId> opens that report read-only style.
+  useEffect(() => {
+    const shareId = new URLSearchParams(window.location.search).get("share");
+    if (shareId) {
+      api.getReview(shareId).then((r) => { openReview(r); showToast("Opened shared review"); }).catch(() => showToast("That shared review no longer exists"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Open alive, not empty: analyze the default workspace file once on launch.
   useEffect(() => {
@@ -293,8 +338,110 @@ export default function App() {
   const sendChat = (text?: string) => {
     const message = (text ?? chatInput).trim();
     if (!message) return;
+    const fixMatch = message.toLowerCase().match(/fix issue\s*(\d+)/);
+    if (fixMatch && current) {
+      const target = current.issues[Number(fixMatch[1]) - 1];
+      setChat((prev) => [...prev,
+        { role: "user", text: message },
+        { role: "assistant", text: target ? `Applying the safe auto-fixes for issue ${fixMatch[1]} (${target.title}, ${target.rule_id}). Watch the editor and score...` : "I could not find that issue number in the current review." },
+      ]);
+      setChatInput("");
+      if (target) void applyAutoFix();
+      return;
+    }
     setChat((prev) => [...prev, { role: "user", text: message }, { role: "assistant", text: answerChat(message) }]);
     setChatInput("");
+  };
+
+
+  const doAuth = async () => {
+    setAuthError(null);
+    try {
+      const result = authMode === "login"
+        ? await api.login(authEmail, authPassword)
+        : await api.register(authEmail, authPassword);
+      setSession(result.token, { id: result.id, email: result.email });
+      setUser({ id: result.id, email: result.email });
+      setAuthOpen(false);
+      showToast(`Signed in as ${result.email}`);
+      refresh();
+    } catch (err) {
+      setAuthError(err instanceof Error ? err.message : "Authentication failed");
+    }
+  };
+
+  const signOut = () => { clearSession(); setUser(null); showToast("Signed out"); refresh(); };
+
+  const runDeepReview = async () => {
+    if (!llmKey.trim()) { setView("settings"); showToast("Add your free Groq/Gemini key in Settings first"); return; }
+    setDeepLoading(true); setDeepReview(null);
+    try {
+      const source = mode === "code" ? code : (current?.file_contents.map((f) => f.lines.map((l) => l.content).join("\n")).join("\n") ?? code);
+      const result = await api.llmReview(source, filename, llmKey.trim(), llmProvider);
+      setDeepReview(result.review);
+      setRightTab("chat");
+      showToast(`Deep AI review complete (${result.provider})`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Deep review failed");
+    } finally { setDeepLoading(false); }
+  };
+
+  const runGenerateTests = async () => {
+    try {
+      const result = await api.generateTests(code, filename);
+      setGeneratedTests({ code: result.test_code, name: result.test_filename });
+      showToast(`Generated ${result.test_filename}`);
+    } catch { showToast("Could not generate tests for this file"); }
+  };
+
+  const postToGitHub = async () => {
+    if (!current) return;
+    const url = prUrl.trim() || promptForPr();
+    if (!url) return;
+    setGhPosting(true);
+    try {
+      const result = await api.postGitHubComment(ghToken.trim(), url, current.id);
+      showToast("Posted to GitHub");
+      window.open(result.comment_url, "_blank");
+      setGhPostOpen(false);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "GitHub posting failed");
+    } finally { setGhPosting(false); }
+  };
+  const promptForPr = (): string | null => prUrl.trim() ? prUrl.trim() : null;
+
+  const copyShareLink = async () => {
+    if (!current) return;
+    const link = `${window.location.origin}${window.location.pathname}?share=${current.id}`;
+    await navigator.clipboard.writeText(link);
+    showToast("Share link copied — anyone with it can view this report");
+  };
+
+  const explainCurrentLine = () => {
+    const editor = editorRef.current;
+    const lineNo: number = editor?.getPosition?.()?.lineNumber ?? 1;
+    const content = (code.split("\n")[lineNo - 1] ?? "").toString();
+    setExplained({ line: lineNo, text: explainLine(content, monacoLanguage(filename)) });
+    setRightTab("chat");
+  };
+
+  const generateProjectReport = () => {
+    const md = [
+      "# Automated Code Review Assistant — Project Report", "",
+      "## Abstract", "This project implements an automated code review system that analyzes source code, git diffs and GitHub pull requests using a deterministic rule engine combined with Python AST analysis. It produces scored, severity-ranked reports with auto-fix and optional LLM deep review.", "",
+      "## 1. Introduction", "Manual code review is slow and inconsistent. This system automates first-pass review so human reviewers focus on design and logic.", "",
+      "## 2. Objectives", "- Detect security, bug, performance and style issues automatically", "- Score code health 0-100 with a quality gate", "- Suggest and apply safe automatic fixes", "- Integrate with real GitHub pull requests", "",
+      "## 3. System Architecture", "React + TypeScript frontend (Monaco editor) -> FastAPI backend -> deterministic analyzer (19 rules + AST) -> SQLite. Optional LLM layer (Groq/Gemini with user key) performs deep review only.", "",
+      "## 4. Implementation", "- Unified diff parser mapping findings to new-file line numbers", "- Per-category scores and cyclomatic complexity metrics", "- JWT auth with PBKDF2 password hashing", "- GitHub REST integration: PR fetch, PR browser, bot comments, webhooks", "",
+      "## 5. Results", `Reviews stored: ${stats?.total_reviews ?? 0}. Average score: ${stats?.average_score ?? "-"}/100. Critical issues detected: ${stats?.critical_issues ?? 0}.`, current ? `Latest review: ${current.title} scored ${current.score}/100 with ${current.issues.length} findings.` : "No review selected.", "",
+      "## 6. Conclusion", "The system demonstrates a production-shaped review pipeline that is explainable in viva: findings come from rules/AST, AI only enriches.", "",
+      "## 7. Future Scope", "- GitHub App installation for org-wide auto-review", "- Dataflow analysis (CodeQL-style) to reduce false positives", "- Inline GitHub review comments per line", "",
+    ].join("\n");
+    const blob = new Blob([md], { type: "text/markdown" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "project-report.md"; a.click();
+    URL.revokeObjectURL(a.href);
+    showToast("Project report downloaded (Markdown — paste into Word/IEEE template)");
   };
 
   const seedDemo = async () => {
@@ -352,9 +499,52 @@ export default function App() {
     </button>
   );
 
+  if (view === "landing") {
+    return <Landing onEnter={() => { localStorage.setItem("rp_visited", "1"); setView("workspace"); }} />;
+  }
+
   return (
     <div className="shell">
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} actions={paletteActions} />
+      {authOpen && (
+        <div className="modal-backdrop" onClick={() => setAuthOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>{authMode === "login" ? "Welcome back" : "Create your account"}</h3>
+            <p className="section-sub" style={{ marginBottom: 14 }}>Accounts keep your reviews tied to you. Guest mode keeps working without one.</p>
+            <div className="field"><label>Email</label><input type="text" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} placeholder="you@example.com" /></div>
+            <div className="field"><label>Password</label><input type="password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} placeholder="At least 6 characters" onKeyDown={(e) => e.key === "Enter" && doAuth()} /></div>
+            {authError && <div className="error-box" style={{ marginBottom: 12 }}>{authError}</div>}
+            <button className="btn btn-accent" style={{ width: "100%", justifyContent: "center" }} onClick={doAuth}>{authMode === "login" ? "Sign in" : "Create account"}</button>
+            <button className="btn btn-ghost" style={{ width: "100%", justifyContent: "center", marginTop: 8 }} onClick={() => setAuthMode(authMode === "login" ? "register" : "login")}>
+              {authMode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}
+            </button>
+          </div>
+        </div>
+      )}
+      {generatedTests && (
+        <div className="modal-backdrop" onClick={() => setGeneratedTests(null)}>
+          <div className="modal modal-wide" onClick={(e) => e.stopPropagation()}>
+            <h3>{generatedTests.name}</h3>
+            <p className="section-sub" style={{ marginBottom: 12 }}>Starter tests generated from your code structure. Fill in real inputs before trusting them.</p>
+            <pre className="modal-code">{generatedTests.code}</pre>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button className="btn btn-accent" onClick={() => navigator.clipboard.writeText(generatedTests.code)}>Copy tests</button>
+              <button className="btn btn-ghost" onClick={() => setGeneratedTests(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {ghPostOpen && (
+        <div className="modal-backdrop" onClick={() => setGhPostOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Post review to GitHub</h3>
+            <p className="section-sub" style={{ marginBottom: 14 }}>Uses your personal access token once to post the bot comment. It is never stored on the server. Needs a fine-grained token with Pull Requests: write on the repo.</p>
+            <div className="field"><label>GitHub token</label><input type="password" value={ghToken} onChange={(e) => setGhToken(e.target.value)} placeholder="github_pat_..." /></div>
+            <div className="field"><label>Pull request URL</label><input type="text" value={prUrl} onChange={(e) => setPrUrl(e.target.value)} placeholder="https://github.com/owner/repo/pull/123" /></div>
+            <button className="btn btn-accent" style={{ width: "100%", justifyContent: "center" }} disabled={ghPosting || !ghToken || !prUrl} onClick={postToGitHub}>{ghPosting ? "Posting..." : "Post comment"}</button>
+          </div>
+        </div>
+      )}
       {toast && <motion.div className="toast" role="status" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>{toast}</motion.div>}
       {/* Activity bar */}
       <aside className="activity">
@@ -363,10 +553,23 @@ export default function App() {
         {navItem("dashboard", <LayoutDashboard size={19} />, "Dash")}
         {navItem("history", <HistoryIcon size={19} />, "History")}
         {navItem("how", <HelpCircle size={19} />, "Guide")}
+        {navItem("settings", <SettingsIcon size={19} />, "Settings")}
+        {navItem("admin", <ShieldCheck size={19} />, "Admin")}
         <button className="activity-btn" onClick={() => setPaletteOpen(true)} title="Command palette (Ctrl+K)">
           <span className="activity-icon"><Search size={18} /></span><span className="activity-label">Search</span>
         </button>
-        <div className="activity-bottom"><div className="avatar">AK</div></div>
+        <div className="activity-bottom">
+          {user ? (
+            <button className="activity-btn" onClick={signOut} title={`Signed in as ${user.email} — click to sign out`}>
+              <span className="activity-icon"><LogOut size={17} /></span><span className="activity-label">Sign out</span>
+            </button>
+          ) : (
+            <button className="activity-btn" onClick={() => setAuthOpen(true)} title="Sign in">
+              <span className="activity-icon"><LogIn size={17} /></span><span className="activity-label">Sign in</span>
+            </button>
+          )}
+          <div className="avatar">{user ? user.email.slice(0, 2).toUpperCase() : "GU"}</div>
+        </div>
       </aside>
 
       {/* Explorer */}
@@ -400,7 +603,7 @@ export default function App() {
       <div className="maincol">
         <header className="topbar2">
           <div className="crumbs">
-            <strong>PR Review Assistant</strong>
+            <strong>ReviewPilot</strong>
             <span>/</span><span>{view === "workspace" ? (centerMode === "report" && current ? current.title : filename) : view}</span>
           </div>
           <div className="topbar-actions">
@@ -428,6 +631,7 @@ export default function App() {
                 <button className={`tab ${centerMode === "editor" ? "active" : ""}`} onClick={() => setCenterMode("editor")}>Editor</button>
                 <button className={`tab ${centerMode === "report" ? "active" : ""}`} onClick={() => current && setCenterMode("report")} disabled={!current}>Report{current ? ` (${current.issues.length})` : ""}</button>
               </div>
+              <button className="btn btn-ghost btn-small" onClick={explainCurrentLine} title="Explain the line your cursor is on">Explain line</button>
               <input className="filename-input mono" value={filename} onChange={(e) => setFilename(e.target.value)} aria-label="Filename" />
             </div>
 
@@ -525,9 +729,21 @@ export default function App() {
                           </div>
                         )}
                       </div>
-                      <button className="btn btn-ghost" onClick={() => exportReport(current)}>Export .md</button>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <button className="btn btn-ghost" onClick={() => exportReport(current)}>Export .md</button>
+                        <button className="btn btn-ghost" onClick={() => window.print()}><Printer size={13} /> PDF</button>
+                        <button className="btn btn-ghost" onClick={copyShareLink}><Share2 size={13} /> Share link</button>
+                        <button className="btn btn-ghost" onClick={() => setGhPostOpen(true)}><GitPullRequest size={13} /> Post to GitHub</button>
+                        <button className="btn btn-ghost" onClick={runDeepReview} disabled={deepLoading}>{deepLoading ? "AI reviewing..." : "Deep AI review"}</button>
+                        <button className="btn btn-ghost" onClick={runGenerateTests}>Generate tests</button>
+                      </div>
                     </div>
                     <Walkthrough review={current} />
+                    <div className="report-charts">
+                      <div className="card card-pad"><div className="section-title">Severity mix</div><SeverityDonut reviews={[current]} /></div>
+                      <div className="card card-pad"><div className="section-title">Category scores</div>{current.category_scores && <CategoryBars scores={current.category_scores} />}</div>
+                      {deepReview && <div className="card card-pad deep-card"><div className="section-title">Deep AI review ({llmProvider})</div><pre className="deep-text">{deepReview}</pre></div>}
+                    </div>
                     {current.file_contents.map((file) => (
                       <div key={file.path} id={`file-${file.path}`}>
                         <CodeViewer
@@ -542,6 +758,14 @@ export default function App() {
                   <div className="empty"><strong>No report yet</strong>Run a review to generate the scored report.</div>
                 )}
 
+                {running && (
+                  <div className="skeleton-wrap" aria-label="Analyzing">
+                    <div className="skeleton" style={{ width: "62%" }} />
+                    <div className="skeleton" style={{ width: "88%" }} />
+                    <div className="skeleton" style={{ width: "74%" }} />
+                    <div className="skeleton" style={{ width: "45%" }} />
+                  </div>
+                )}
                 {/* Terminal */}
                 <div className="terminal">
                   <div className="terminal-head"><span>REVIEW TERMINAL</span><button className="terminal-clear" onClick={() => setLogs([])}>clear</button></div>
@@ -557,6 +781,7 @@ export default function App() {
                   <button className={rightTab === "issues" ? "active" : ""} onClick={() => setRightTab("issues")}><Gauge size={13} /> Issues{current ? ` (${current.issues.length})` : ""}</button>
                   <button className={rightTab === "chat" ? "active" : ""} onClick={() => setRightTab("chat")}><MessageSquareText size={13} /> AI Assistant</button>
                   <button className={rightTab === "metrics" ? "active" : ""} onClick={() => setRightTab("metrics")}><BarChart3 size={13} /> Metrics</button>
+                  <button className={rightTab === "team" ? "active" : ""} onClick={() => setRightTab("team")}><Users size={13} /> Team</button>
                 </div>
                 {rightTab === "issues" && (
                   current
@@ -565,6 +790,9 @@ export default function App() {
                 )}
                 {rightTab === "chat" && (
                   <div className="chat">
+                    {explained && (
+                      <div className="explained-card"><strong>Line {explained.line}</strong><span>{explained.text}</span></div>
+                    )}
                     <div className="chat-messages">
                       {chat.map((m, i) => (
                         <div key={i} className={`chat-msg ${m.role}`}>{m.text}</div>
@@ -606,6 +834,32 @@ export default function App() {
                       )}
                     </div>
                   ) : <div className="empty"><strong>No metrics yet</strong>Metrics are computed per review.</div>
+                )}
+                {rightTab === "team" && (
+                  <div style={{ padding: 16 }}>
+                    <div className="section-title">Team</div>
+                    <p className="section-sub" style={{ marginBottom: 12 }}>Invite members, assign the selected issue, discuss it here. Stored locally in this browser.</p>
+                    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                      <input className="team-input" value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="teammate@example.com" />
+                      <button className="btn btn-accent btn-small" onClick={() => { if (!newMember.trim()) return; const next = [...teamMembers, newMember.trim()]; setTeamMembers(next); localStorage.setItem("rp_team", JSON.stringify(next)); setNewMember(""); }}>Invite</button>
+                    </div>
+                    {teamMembers.map((m) => <div key={m} className="team-member"><span className="avatar avatar-small">{m.slice(0, 2).toUpperCase()}</span>{m}</div>)}
+                    {selectedIssue ? (
+                      <div style={{ marginTop: 16 }}>
+                        <div className="section-title" style={{ fontSize: 12.5 }}>Selected issue</div>
+                        <p className="section-sub">{selectedIssue.rule_id} — {selectedIssue.title}</p>
+                        <select className="team-input" style={{ width: "100%", marginTop: 8 }} value={assignments[selectedIssue.id] ?? ""} onChange={(e) => { const next = { ...assignments, [selectedIssue.id]: e.target.value }; setAssignments(next); localStorage.setItem("rp_assign", JSON.stringify(next)); }}>
+                          <option value="">Assign to...</option>
+                          {teamMembers.map((m) => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                          <input className="team-input" style={{ flex: 1 }} value={issueComment} onChange={(e) => setIssueComment(e.target.value)} placeholder="Add a comment..." />
+                          <button className="btn btn-ghost btn-small" onClick={() => { if (!issueComment.trim()) return; const next = { ...issueComments, [selectedIssue.id]: [...(issueComments[selectedIssue.id] ?? []), issueComment.trim()] }; setIssueComments(next); localStorage.setItem("rp_comments", JSON.stringify(next)); setIssueComment(""); }}>Post</button>
+                        </div>
+                        {(issueComments[selectedIssue.id] ?? []).map((c, i) => <div key={i} className="team-comment">{c}</div>)}
+                      </div>
+                    ) : <p className="section-sub" style={{ marginTop: 14 }}>Select an issue to assign or discuss it.</p>}
+                  </div>
                 )}
               </aside>
             </div>
@@ -654,12 +908,42 @@ export default function App() {
 
         {view === "history" && (
           <div className="content">
-            <div className="page-head"><div><h2>Review history</h2><p>All reviews stored locally in SQLite.</p></div></div>
+            <div className="page-head"><div><h2>Review history</h2><p>Search, filter and compare reviews stored in SQLite.</p></div>
+              <div className="spacer" />
+              <button className="btn btn-accent" disabled={compareIds.length !== 2} onClick={() => setView("compare")}>Compare selected ({compareIds.length}/2)</button>
+            </div>
+            <div className="history-controls">
+              <input className="team-input" style={{ flex: 1 }} value={historyQuery} onChange={(e) => setHistoryQuery(e.target.value)} placeholder="Search by title, file or source..." />
+              <select className="team-input" value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value)}>
+                <option value="all">All reviews</option>
+                <option value="critical">Has critical issues</option>
+                <option value="passing">Passing (score 75+)</option>
+                <option value="failing">Needs work (score &lt; 75)</option>
+                <option value="github">GitHub / diff</option>
+              </select>
+            </div>
             <div className="card">
               {history.length === 0 ? <div className="empty"><strong>No reviews yet</strong>Completed reviews appear here.</div> : (
-                <table className="table"><thead><tr><th>Review</th><th>Source</th><th>Files</th><th>Issues</th><th>Score</th><th>Date</th></tr></thead>
-                  <tbody>{history.map((r) => (
-                    <tr key={r.id} onClick={() => openReview(r)}><td style={{ fontWeight: 550 }}>{r.title}</td><td style={{ textTransform: "capitalize" }}>{r.source}</td><td>{r.stats.files_changed}</td><td>{r.stats.total_issues}</td><td><span className={`score-chip ${scoreClass(r.score)}`}>{r.score}</span></td><td>{formatDate(r.created_at)}</td></tr>
+                <table className="table"><thead><tr><th></th><th>Review</th><th>Source</th><th>Files</th><th>Issues</th><th>Score</th><th>Date</th></tr></thead>
+                  <tbody>{history
+                    .filter((r) => {
+                      const q = historyQuery.toLowerCase();
+                      const matchesQ = !q || r.title.toLowerCase().includes(q) || r.source.includes(q) || r.files.some((f) => f.path.toLowerCase().includes(q));
+                      const matchesF = historyFilter === "all" ? true
+                        : historyFilter === "critical" ? (r.stats.critical ?? 0) > 0
+                        : historyFilter === "passing" ? r.score >= 75
+                        : historyFilter === "failing" ? r.score < 75
+                        : r.source !== "paste";
+                      return matchesQ && matchesF;
+                    })
+                    .map((r) => (
+                    <tr key={r.id} onClick={() => openReview(r)}>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={compareIds.includes(r.id)} onChange={(e) => {
+                          setCompareIds((prev) => e.target.checked ? [...prev.slice(-1), r.id] : prev.filter((id) => id !== r.id));
+                        }} />
+                      </td>
+                      <td style={{ fontWeight: 550 }}>{r.title}</td><td style={{ textTransform: "capitalize" }}>{r.source}</td><td>{r.stats.files_changed}</td><td>{r.stats.total_issues}</td><td><span className={`score-chip ${scoreClass(r.score)}`}>{r.score}</span></td><td>{formatDate(r.created_at)}</td></tr>
                   ))}</tbody></table>
               )}
             </div>
@@ -683,6 +967,91 @@ export default function App() {
                 · Known limits — regex rules can false-positive on comments; private repos need OAuth (roadmap in README).
               </p>
             </div>
+          </div>
+        )}
+
+        {view === "settings" && (
+          <div className="content">
+            <div className="page-head"><div><h2>Settings</h2><p>Appearance, AI provider, and project tools.</p></div></div>
+            <div className="settings-grid">
+              <div className="card card-pad">
+                <div className="section-title">Theme</div>
+                <p className="section-sub" style={{ marginBottom: 12 }}>Light or dark workspace.</p>
+                <div className="tabs">
+                  <button className={`tab ${theme === "dark" ? "active" : ""}`} onClick={() => setTheme("dark")}>Dark</button>
+                  <button className={`tab ${theme === "light" ? "active" : ""}`} onClick={() => setTheme("light")}>Light</button>
+                </div>
+                <div className="section-title" style={{ marginTop: 18 }}>Accent colour</div>
+                <div className="accent-row">
+                  {["#2dd4bf", "#38bdf8", "#a78bfa", "#f472b6", "#fbbf24", "#4ade80"].map((c) => (
+                    <button key={c} className={`accent-swatch ${accent === c ? "active" : ""}`} style={{ background: c }} onClick={() => setAccent(c)} aria-label={c} />
+                  ))}
+                </div>
+              </div>
+              <div className="card card-pad">
+                <div className="section-title">Deep AI review (optional)</div>
+                <p className="section-sub" style={{ marginBottom: 12 }}>Your key is kept only in this browser and sent per-request. It is never stored on the server. Groq and Gemini both have free tiers.</p>
+                <div className="field"><label>Provider</label>
+                  <select className="team-input" style={{ width: "100%" }} value={llmProvider} onChange={(e) => { setLlmProvider(e.target.value); localStorage.setItem("rp_llm_provider", e.target.value); }}>
+                    <option value="groq">Groq (Llama 3.3 70B)</option>
+                    <option value="gemini">Google Gemini 2.0 Flash</option>
+                  </select>
+                </div>
+                <div className="field"><label>API key</label><input type="password" value={llmKey} onChange={(e) => { setLlmKey(e.target.value); localStorage.setItem("rp_llm_key", e.target.value); }} placeholder="Paste your free API key" /></div>
+                <button className="btn btn-accent" onClick={runDeepReview} disabled={deepLoading}>{deepLoading ? "Reviewing..." : "Run deep AI review on current code"}</button>
+                {deepReview && <pre className="deep-text" style={{ marginTop: 14 }}>{deepReview}</pre>}
+              </div>
+              <div className="card card-pad">
+                <div className="section-title">GitHub automation</div>
+                <p className="section-sub" style={{ lineHeight: 1.8 }}>
+                  Webhook endpoint for zero-click reviews:<br />
+                  <span className="mono" style={{ color: "var(--accent)" }}>/api/webhooks/github</span><br />
+                  In your repo: Settings → Webhooks → Add webhook → this URL (through your tunnel/host), content type JSON, event: Pull requests. New PRs are then reviewed automatically into History.
+                </p>
+              </div>
+              <div className="card card-pad">
+                <div className="section-title">College submission tools</div>
+                <p className="section-sub" style={{ marginBottom: 12 }}>Generate an IEEE-structured project report filled with your real project data, and export any report as PDF from the Report view.</p>
+                <button className="btn btn-accent" onClick={generateProjectReport}>Generate project report (.md)</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {view === "admin" && (
+          <div className="content">
+            <div className="page-head"><div><h2>Admin analytics</h2><p>Platform-wide usage across all stored reviews.</p></div>
+              <div className="spacer" /><button className="btn btn-ghost" onClick={refresh}>Refresh</button></div>
+            <AdminPanel />
+          </div>
+        )}
+
+        {view === "compare" && (
+          <div className="content">
+            <div className="page-head"><div><h2>Compare reviews</h2><p>Side-by-side diff of two reviews — perfect for before/after a fix.</p></div></div>
+            {(() => {
+              const [a, b] = compareIds.map((id) => history.find((r) => r.id === id)).filter(Boolean) as ReviewResult[];
+              if (!a || !b) return <div className="card empty"><strong>Select two reviews</strong>Go to History, tick two reviews, then open Compare.</div>;
+              const rows: Array<[string, number | string, number | string]> = [
+                ["Score", a.score, b.score], ["Critical", a.stats.critical ?? 0, b.stats.critical ?? 0],
+                ["High", a.stats.high ?? 0, b.stats.high ?? 0], ["Total issues", a.stats.total_issues, b.stats.total_issues],
+                ["Files", a.stats.files_changed, b.stats.files_changed],
+              ];
+              return (
+                <div className="card card-pad">
+                  <div className="compare-head"><div><strong>{a.title}</strong><div className="section-sub">{formatDate(a.created_at)}</div></div><span className="compare-vs">vs</span><div><strong>{b.title}</strong><div className="section-sub">{formatDate(b.created_at)}</div></div></div>
+                  <table className="table"><thead><tr><th>Metric</th><th>First</th><th>Second</th><th>Delta</th></tr></thead>
+                    <tbody>{rows.map(([label, av, bv]) => { const d = Number(bv) - Number(av); return (
+                      <tr key={label}><td style={{ fontWeight: 600 }}>{label}</td><td>{av}</td><td>{bv}</td>
+                      <td style={{ color: label === "Score" ? (d >= 0 ? "#3fb950" : "#f85149") : d <= 0 ? "#3fb950" : "#f85149", fontWeight: 700 }}>{d > 0 ? `+${d}` : d}</td></tr>); })}
+                    </tbody></table>
+                  <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                    <button className="btn btn-ghost" onClick={() => openReview(a)}>Open first</button>
+                    <button className="btn btn-ghost" onClick={() => openReview(b)}>Open second</button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>

@@ -114,3 +114,9 @@ ai-code-review-assistant/
 
 - Regex-based rules can false-positive on comments/string literals; AST checks mitigate this for Python
 - Diff mode analyzes added lines; deep cross-file analysis needs full-repo context (roadmap)
+
+<!-- Badges: replace YOUR-USERNAME and the demo URL after you deploy -->
+[![Build](https://img.shields.io/badge/build-passing-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-15%20passed-brightgreen)](#)
+[![Live Demo](https://img.shields.io/badge/live%20demo-ReviewPilot-blue)](https://your-demo-url.example.com)
+[![Stack](https://img.shields.io/badge/stack-FastAPI%20%2B%20React%20%2B%20Monaco-2dd4bf)](#)

@@ -98,3 +98,37 @@ class AppliedFixOut(BaseModel):
 class FixResult(BaseModel):
     fixed_code: str
     applied: list[AppliedFixOut]
+
+
+class AuthRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=200)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class AuthResult(BaseModel):
+    id: str
+    email: str
+    token: str
+
+
+class GitHubCommentRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=300)
+    pr_url: str = Field(min_length=10, max_length=500)
+    review_id: str = Field(min_length=4, max_length=50)
+
+
+class TestGenRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=200_000)
+    filename: str = "main.py"
+
+
+class TestGenResult(BaseModel):
+    test_code: str
+    test_filename: str
+
+
+class LLMReviewRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=60_000)
+    filename: str = "main.py"
+    api_key: str = Field(min_length=10, max_length=300)
+    provider: str = "groq"
