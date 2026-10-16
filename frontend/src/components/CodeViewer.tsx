@@ -1,4 +1,3 @@
-import { Bot, Check, Copy } from "lucide-react";
 import { useState } from "react";
 import type { FileContent, Issue } from "../lib/types";
 
@@ -59,7 +58,7 @@ export default function CodeViewer({ file, issues, selectedIssueId, onSelectIssu
 
               {lineIssues.map((issue) => (
                 <div key={issue.id} className={`inline-thread ${resolvedIds?.has(issue.id) ? "resolved" : ""}`}>
-                  <div className="thread-avatar"><Bot size={14} /></div>
+                  <div className="thread-avatar">RP</div>
                   <div className="thread-body">
                     <div className="thread-top">
                       <strong>pr-review-bot</strong>
@@ -74,11 +73,11 @@ export default function CodeViewer({ file, issues, selectedIssueId, onSelectIssu
                         <pre className="thread-fix">{issue.suggested_fix}</pre>
                         <div className="thread-actions">
                           <button className="btn btn-ghost btn-small" onClick={() => copyFix(issue)}>
-                            <Copy size={12} /> {copiedId === issue.id ? "Copied" : "Copy fix"}
+                            {copiedId === issue.id ? "Copied" : "Copy fix"}
                           </button>
                           {onResolve && !resolvedIds?.has(issue.id) && (
                             <button className="btn btn-ghost btn-small" onClick={() => onResolve(issue)}>
-                              <Check size={12} /> Resolve conversation
+                              Resolve conversation
                             </button>
                           )}
                         </div>
@@ -87,7 +86,7 @@ export default function CodeViewer({ file, issues, selectedIssueId, onSelectIssu
                     {!issue.suggested_fix && onResolve && !resolvedIds?.has(issue.id) && (
                       <div className="thread-actions">
                         <button className="btn btn-ghost btn-small" onClick={() => onResolve(issue)}>
-                          <Check size={12} /> Resolve conversation
+                          Resolve conversation
                         </button>
                       </div>
                     )}

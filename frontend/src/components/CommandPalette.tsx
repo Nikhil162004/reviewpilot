@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { Search } from "lucide-react";
 
 export interface PaletteAction {
   id: string;
@@ -26,20 +24,12 @@ export default function CommandPalette({ open, onClose, actions }: {
 
   useEffect(() => { setIndex(0); }, [query]);
 
+  if (!open) return null;
   return (
-    <AnimatePresence>
-      {open && (
-        <motion.div className="palette-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>
-          <motion.div
-            className="palette"
-            initial={{ opacity: 0, y: -10, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.98 }}
-            transition={{ duration: 0.16 }}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <div className="palette-backdrop" onClick={onClose}>
+          <div className="palette" onClick={(e) => e.stopPropagation()}>
             <div className="palette-search">
-              <Search size={17} />
+              <span className="palette-search-label">Search</span>
               <input
                 autoFocus value={query} onChange={(e) => setQuery(e.target.value)}
                 placeholder="Type a command or search reviews…"
@@ -66,9 +56,7 @@ export default function CommandPalette({ open, onClose, actions }: {
               ))}
             </div>
             <div className="palette-foot"><span>↑↓ navigate</span><span>↵ select</span><span>Ctrl+Enter runs a review</span></div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          </div>
+        </div>
   );
 }

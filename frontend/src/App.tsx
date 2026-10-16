@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Editor from "@monaco-editor/react";
-import { motion } from "framer-motion";
-import {
-  BarChart3, Code2, FileCode2, Gauge, GitPullRequest, HelpCircle, History as HistoryIcon,
-  LayoutDashboard, LogIn, LogOut, MessageSquareText, Play, Printer, Search, Settings as SettingsIcon,
-  Share2, ShieldCheck, Sparkles, Users, Wand2,
-} from "lucide-react";
 import { CategoryBars, ScoreTrend, SeverityDonut, TopRules, estimatedEffort, qualityGate } from "./components/Charts";
 import CommandPalette, { type PaletteAction } from "./components/CommandPalette";
 import CodeViewer from "./components/CodeViewer";
@@ -20,7 +14,7 @@ import { explainLine } from "./lib/explain";
 import { SAMPLE_CLEAN, SAMPLE_CODE, SAMPLE_DIFF, SAMPLE_JS } from "./lib/sample";
 import type { DashboardStats, Issue, ReviewResult } from "./lib/types";
 
-type View = "landing" | "workspace" | "dashboard" | "history" | "how" | "settings" | "admin" | "compare";
+type View = "landing" | "workspace" | "dashboard" | "history" | "how" | "settings" | "admin" | "compare" | "notfound";
 type InputMode = "code" | "diff" | "github";
 type CenterMode = "editor" | "report";
 type RightTab = "issues" | "chat" | "metrics" | "team";
@@ -91,7 +85,11 @@ function exportReport(review: ReviewResult) {
 }
 
 export default function App() {
-  const [view, setView] = useState<View>(() => (localStorage.getItem("rp_visited") ? "workspace" : "landing"));
+  const [view, setView] = useState<View>(() => {
+    if (window.location.pathname !== "/" && !window.location.pathname.startsWith("/assets")) return "notfound";
+    return localStorage.getItem("rp_visited") ? "workspace" : "landing";
+  });
+  const [mobileNav, setMobileNav] = useState(false);
   const [user, setUser] = useState(getUser());
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
@@ -169,6 +167,21 @@ export default function App() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    const titles: Record<string, string> = {
+      landing: "ReviewPilot: Automated Code Review",
+      workspace: "Review workspace · ReviewPilot",
+      dashboard: "Dashboard · ReviewPilot",
+      history: "Review history · ReviewPilot",
+      how: "How it works · ReviewPilot",
+      settings: "Settings · ReviewPilot",
+      admin: "Admin analytics · ReviewPilot",
+      compare: "Compare reviews · ReviewPilot",
+      notfound: "Page not found · ReviewPilot",
+    };
+    document.title = titles[view] ?? "ReviewPilot";
+  }, [view]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -499,8 +512,19 @@ export default function App() {
     </button>
   );
 
+  if (view === "notfound") {
+    return (
+      <main className="notfound">
+        <p className="notfound-code">404</p>
+        <h1>That page does not exist.</h1>
+        <p>The address may be mistyped, or the page may have moved.</p>
+        <button className="btn btn-primary btn-large" onClick={() => { window.history.replaceState(null, "", "/"); setView("landing"); }}>Go to the home page</button>
+      </main>
+    );
+  }
+
   if (view === "landing") {
-    return <Landing onEnter={() => { localStorage.setItem("rp_visited", "1"); setView("workspace"); }} />;
+    return <Landing onEnter={() => { localStorage.setItem("rp_visited", "1"); setView("workspace"); }} onGuide={() => { localStorage.setItem("rp_visited", "1"); setView("how"); }} onDashboard={() => { localStorage.setItem("rp_visited", "1"); setView("dashboard"); }} />;
   }
 
   return (
@@ -545,27 +569,27 @@ export default function App() {
           </div>
         </div>
       )}
-      {toast && <motion.div className="toast" role="status" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>{toast}</motion.div>}
+      {toast && <div className="toast" role="status">{toast}</div>}
       {/* Activity bar */}
       <aside className="activity">
-        <div className="activity-logo"><Code2 size={19} strokeWidth={2.6} /></div>
-        {navItem("workspace", <Code2 size={19} />, "Review")}
-        {navItem("dashboard", <LayoutDashboard size={19} />, "Dash")}
-        {navItem("history", <HistoryIcon size={19} />, "History")}
-        {navItem("how", <HelpCircle size={19} />, "Guide")}
-        {navItem("settings", <SettingsIcon size={19} />, "Settings")}
-        {navItem("admin", <ShieldCheck size={19} />, "Admin")}
+        <div className="activity-logo">RP</div>
+        {navItem("workspace", "RV", "Review")}
+        {navItem("dashboard", "DB", "Dash")}
+        {navItem("history", "HS", "History")}
+        {navItem("how", "GD", "Guide")}
+        {navItem("settings", "ST", "Settings")}
+        {navItem("admin", "AD", "Admin")}
         <button className="activity-btn" onClick={() => setPaletteOpen(true)} title="Command palette (Ctrl+K)">
-          <span className="activity-icon"><Search size={18} /></span><span className="activity-label">Search</span>
+          <span className="activity-icon"></span><span className="activity-label">Search</span>
         </button>
         <div className="activity-bottom">
           {user ? (
             <button className="activity-btn" onClick={signOut} title={`Signed in as ${user.email} — click to sign out`}>
-              <span className="activity-icon"><LogOut size={17} /></span><span className="activity-label">Sign out</span>
+              <span className="activity-icon"></span><span className="activity-label">Sign out</span>
             </button>
           ) : (
             <button className="activity-btn" onClick={() => setAuthOpen(true)} title="Sign in">
-              <span className="activity-icon"><LogIn size={17} /></span><span className="activity-label">Sign in</span>
+              <span className="activity-icon"></span><span className="activity-label">Sign in</span>
             </button>
           )}
           <div className="avatar">{user ? user.email.slice(0, 2).toUpperCase() : "GU"}</div>
@@ -574,13 +598,13 @@ export default function App() {
 
       {/* Explorer */}
       {view === "workspace" && (
-        <aside className="explorer">
+        <aside className={`explorer ${mobileNav ? "mobile-open" : ""}`}>
           <div className="explorer-head">EXPLORER</div>
           <div className="explorer-section">Workspace files</div>
           {SAMPLE_FILES.map((f) => (
             <button key={f.name} className={`explorer-file ${activeSample === f.name && mode === "code" ? "active" : ""}`}
               onClick={() => { setCode(f.code); setFilename(f.filename); setActiveSample(f.name); setMode("code"); setCenterMode("editor"); }}>
-              <span className="file-dot" data-lang={f.filename.endsWith(".js") ? "js" : "py"}><FileCode2 size={12} /></span>
+              <span className="file-dot" data-lang={f.filename.endsWith(".js") ? "js" : "py"}></span>
               <span className="explorer-file-name">{f.label}</span>
             </button>
           ))}
@@ -602,6 +626,7 @@ export default function App() {
       {/* Main column */}
       <div className="maincol">
         <header className="topbar2">
+          <button className="mobile-menu-btn" onClick={() => setMobileNav((v) => !v)} aria-label="Toggle navigation menu">Menu</button>
           <div className="crumbs">
             <strong>ReviewPilot</strong>
             <span>/</span><span>{view === "workspace" ? (centerMode === "report" && current ? current.title : filename) : view}</span>
@@ -611,9 +636,9 @@ export default function App() {
             <span className="status-dot">Engine operational</span>
             {view === "workspace" && (
               <>
-                <button className="btn btn-ghost" onClick={() => setPaletteOpen(true)}><Search size={15} /> <span className="kbd-hint">Ctrl K</span></button>
-                <button className="btn btn-ghost" onClick={applyAutoFix} disabled={fixing || running}><Wand2 size={15} /> {fixing ? "Fixing…" : "Auto-fix"}</button>
-                <button className="btn btn-accent" onClick={() => runReview()} disabled={running}><Play size={15} /> {running ? "Analyzing…" : "Run review"}</button>
+                <button className="btn btn-ghost" onClick={() => setPaletteOpen(true)}> <span className="kbd-hint">Ctrl K</span></button>
+                <button className="btn btn-ghost" onClick={applyAutoFix} disabled={fixing || running}> {fixing ? "Fixing…" : "Auto-fix"}</button>
+                <button className="btn btn-accent" onClick={() => runReview()} disabled={running}> {running ? "Analyzing…" : "Run review"}</button>
               </>
             )}
           </div>
@@ -625,7 +650,7 @@ export default function App() {
               <div className="tabs">
                 <button className={`tab ${mode === "code" ? "active" : ""}`} onClick={() => setMode("code")}>Code</button>
                 <button className={`tab ${mode === "diff" ? "active" : ""}`} onClick={() => setMode("diff")}>Git diff</button>
-                <button className={`tab ${mode === "github" ? "active" : ""}`} onClick={() => setMode("github")}><GitPullRequest size={13} /> GitHub PR</button>
+                <button className={`tab ${mode === "github" ? "active" : ""}`} onClick={() => setMode("github")}> GitHub PR</button>
               </div>
               <div className="tabs">
                 <button className={`tab ${centerMode === "editor" ? "active" : ""}`} onClick={() => setCenterMode("editor")}>Editor</button>
@@ -645,7 +670,7 @@ export default function App() {
             )}
 
             {error && <div className="error-box" style={{ margin: "14px 18px 0" }}>{error}</div>}
-            {fixNotice && <div className="notice-box" style={{ margin: "14px 18px 0" }}>⚡ {fixNotice}</div>}
+            {fixNotice && <div className="notice-box" style={{ margin: "14px 18px 0" }}><strong>Auto-fix:</strong> {fixNotice}</div>}
 
             <div className="workspace-grid">
               <section className="centerpane">
@@ -715,7 +740,7 @@ export default function App() {
                           const gate = qualityGate(current);
                           return (
                             <div className={`gate ${gate.passed ? "passed" : "failed"}`}>
-                              <strong>{gate.passed ? "✓ Quality gate PASSED" : "✕ Quality gate FAILED"}</strong>
+                              <strong>{gate.passed ? "Quality gate: PASSED" : "Quality gate: FAILED"}</strong>
                               <span>{gate.passed ? "Meets merge thresholds (score ≥ 75, no criticals)" : gate.reasons.join(" · ")}</span>
                               <span className="gate-effort">Est. fix effort: {estimatedEffort(current)}</span>
                             </div>
@@ -731,9 +756,9 @@ export default function App() {
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                         <button className="btn btn-ghost" onClick={() => exportReport(current)}>Export .md</button>
-                        <button className="btn btn-ghost" onClick={() => window.print()}><Printer size={13} /> PDF</button>
-                        <button className="btn btn-ghost" onClick={copyShareLink}><Share2 size={13} /> Share link</button>
-                        <button className="btn btn-ghost" onClick={() => setGhPostOpen(true)}><GitPullRequest size={13} /> Post to GitHub</button>
+                        <button className="btn btn-ghost" onClick={() => window.print()}> PDF</button>
+                        <button className="btn btn-ghost" onClick={copyShareLink}> Share link</button>
+                        <button className="btn btn-ghost" onClick={() => setGhPostOpen(true)}> Post to GitHub</button>
                         <button className="btn btn-ghost" onClick={runDeepReview} disabled={deepLoading}>{deepLoading ? "AI reviewing..." : "Deep AI review"}</button>
                         <button className="btn btn-ghost" onClick={runGenerateTests}>Generate tests</button>
                       </div>
@@ -778,10 +803,10 @@ export default function App() {
               {/* Right panel */}
               <aside className="rightpane">
                 <div className="righttabs">
-                  <button className={rightTab === "issues" ? "active" : ""} onClick={() => setRightTab("issues")}><Gauge size={13} /> Issues{current ? ` (${current.issues.length})` : ""}</button>
-                  <button className={rightTab === "chat" ? "active" : ""} onClick={() => setRightTab("chat")}><MessageSquareText size={13} /> AI Assistant</button>
-                  <button className={rightTab === "metrics" ? "active" : ""} onClick={() => setRightTab("metrics")}><BarChart3 size={13} /> Metrics</button>
-                  <button className={rightTab === "team" ? "active" : ""} onClick={() => setRightTab("team")}><Users size={13} /> Team</button>
+                  <button className={rightTab === "issues" ? "active" : ""} onClick={() => setRightTab("issues")}> Issues{current ? ` (${current.issues.length})` : ""}</button>
+                  <button className={rightTab === "chat" ? "active" : ""} onClick={() => setRightTab("chat")}> AI Assistant</button>
+                  <button className={rightTab === "metrics" ? "active" : ""} onClick={() => setRightTab("metrics")}> Metrics</button>
+                  <button className={rightTab === "team" ? "active" : ""} onClick={() => setRightTab("team")}> Team</button>
                 </div>
                 {rightTab === "issues" && (
                   current
@@ -878,7 +903,7 @@ export default function App() {
             <div className="page-head">
               <div><h2>Code review overview</h2><p>Deterministic analysis — reproducible, explainable, and scored. No black box.</p></div>
               <div className="spacer" />
-              <button className="btn btn-ghost" onClick={seedDemo} disabled={seeding}><Sparkles size={15} /> {seeding ? "Generating…" : "Generate demo dataset"}</button>
+              <button className="btn btn-ghost" onClick={seedDemo} disabled={seeding}> {seeding ? "Generating…" : "Generate demo dataset"}</button>
               <button className="btn btn-accent" onClick={() => setView("workspace")}>Open review workspace</button>
             </div>
             <div className="stats-grid">
@@ -998,7 +1023,10 @@ export default function App() {
                   </select>
                 </div>
                 <div className="field"><label>API key</label><input type="password" value={llmKey} onChange={(e) => { setLlmKey(e.target.value); localStorage.setItem("rp_llm_key", e.target.value); }} placeholder="Paste your free API key" /></div>
-                <button className="btn btn-accent" onClick={runDeepReview} disabled={deepLoading}>{deepLoading ? "Reviewing..." : "Run deep AI review on current code"}</button>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button className="btn btn-ghost" onClick={() => showToast(llmKey ? "Settings saved in this browser" : "Add an API key first, then save")}>Save settings</button>
+                  <button className="btn btn-accent" onClick={runDeepReview} disabled={deepLoading}>{deepLoading ? "Reviewing..." : "Run deep AI review on current code"}</button>
+                </div>
                 {deepReview && <pre className="deep-text" style={{ marginTop: 14 }}>{deepReview}</pre>}
               </div>
               <div className="card card-pad">

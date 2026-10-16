@@ -2,7 +2,19 @@
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+import re
+
+from pydantic import BaseModel, Field, field_validator
+
+_SAFE_NAME = re.compile(r"^[^<>\x00-\x1f]{1,120}$")
+_SAFE_FILE = re.compile(r"^[A-Za-z0-9_./ -]{1,160}$")
+
+
+def _clean_text(value: str) -> str:
+    # Strip angle brackets / control chars from display-bound text (XSS hygiene).
+    cleaned = re.sub(r"[< >\x00-\x1f]", "", value).strip()
+    return cleaned or "untitled"
+
 
 
 class Severity(str, Enum):
@@ -74,10 +86,28 @@ class CodeReviewRequest(BaseModel):
     filename: str = "main.py"
     title: str = "Pasted code review"
 
+    @field_validator("filename")
+    @classmethod
+    def _safe_filename(cls, v: str) -> str:
+        v = v.replace("\\", "/")
+        if ".." in v.split("/") or not _SAFE_FILE.match(v):
+            raise ValueError("Invalid filename")
+        return v
+
+    @field_validator("title")
+    @classmethod
+    def _safe_title(cls, v: str) -> str:
+        return _clean_text(v)[:120]
+
 
 class DiffReviewRequest(BaseModel):
     diff: str = Field(min_length=1, max_length=500_000)
     title: str = "Pull request diff review"
+
+    @field_validator("title")
+    @classmethod
+    def _safe_title(cls, v: str) -> str:
+        return _clean_text(v)[:120]
 
 
 class GitHubPRRequest(BaseModel):

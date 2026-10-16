@@ -1,6 +1,9 @@
-"""FastAPI application — PR Review Assistant API."""
+"""FastAPI application - PR Review Assistant API."""
 
+import hashlib
+import hmac
 import json
+import os
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,15 +29,27 @@ from app.services.diff_parser import parse_unified_diff
 from app.services.llm_review import deep_review, review_markdown
 from app.services.testgen import generate_tests
 
-app = FastAPI(title="PR Review Assistant", version="2.0.0")
+_DEBUG = os.environ.get("APP_DEBUG", "").lower() == "true"
+app = FastAPI(
+    title="PR Review Assistant", version="2.0.0",
+    docs_url="/docs" if _DEBUG else None,
+    redoc_url=None,
+    openapi_url="/openapi.json" if _DEBUG else None,
+)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_origin_regex=r"https://.*\.e2b\.app",
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type", "X-Hub-Signature-256", "X-GitHub-Event"],
+    allow_credentials=False,
+    max_age=600,
 )
+
+from app.security import SecurityMiddleware  # noqa: E402
+
+app.add_middleware(SecurityMiddleware)
 
 
 def _finalize(result: ReviewResult, user: dict | None = None) -> ReviewResult:
@@ -147,8 +162,15 @@ async def github_webhook(request: Request) -> dict:
     history like any other; set GROQ/API posting if you extend it to
     comment back automatically.
     """
+    raw = await request.body()
+    webhook_secret = os.environ.get("WEBHOOK_SECRET")
+    if webhook_secret:
+        signature = request.headers.get("X-Hub-Signature-256", "")
+        expected = "sha256=" + hmac.new(webhook_secret.encode(), raw, hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, signature):
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
     try:
-        payload = await request.json()
+        payload = json.loads(raw or b"{}")
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
     action = payload.get("action")
@@ -184,7 +206,10 @@ def tests_generate(payload: TestGenRequest) -> TestGenResult:
 
 
 @app.get("/api/admin/analytics")
-def admin_analytics() -> dict:
+def admin_analytics(authorization: str | None = Header(default=None)) -> dict:
+    # Admin data is aggregate platform usage: signed-in users only.
+    if not auth_service.verify_token(authorization):
+        raise HTTPException(status_code=401, detail="Sign in required for admin analytics")
     return store.admin_analytics()
 
 

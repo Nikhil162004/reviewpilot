@@ -1,52 +1,76 @@
-import { motion } from "framer-motion";
-import { ArrowRight, Bot, GitPullRequest, ShieldCheck, Wand2, Zap } from "lucide-react";
+interface Props {
+  onEnter: () => void;
+  onGuide: () => void;
+  onDashboard: () => void;
+}
 
-const FEATURES = [
-  { icon: <ShieldCheck size={19} />, title: "Security-first analysis", text: "Secrets, injection, unsafe deserialization and TLS mistakes — caught deterministically, with rule IDs you can cite." },
-  { icon: <GitPullRequest size={19} />, title: "Real GitHub reviews", text: "Fetch any public PR, review it, and post the bot's verdict back as a GitHub comment." },
-  { icon: <Wand2 size={19} />, title: "Auto-fix with proof", text: "Safe mechanical fixes applied automatically — then re-scored so you see the improvement, not just a promise." },
-  { icon: <Bot size={19} />, title: "Chat with your review", text: "Ask what is dangerous, how to fix it, or whether it is safe to merge. Answers come from real findings." },
+const FEATURES: Array<[string, string, string]> = [
+  ["01", "Finds the mistakes that matter first", "Hardcoded passwords, SQL built from user input, pickle on untrusted data, TLS checks switched off. Each finding has a rule number, the exact line, and what to change."],
+  ["02", "Works on real pull requests", "Paste a GitHub PR link or browse a public repo inside the app. When you are done, the same report can be posted back to GitHub as a comment."],
+  ["03", "Fixes the mechanical problems for you", "Secrets move to environment variables, MD5 becomes SHA-256, bare except clauses get a real exception type. The review runs again afterwards so the score change is measured, not promised."],
+  ["04", "You can question the result", "Ask the assistant panel which finding is dangerous, or type \"fix issue 2\" and watch it work. If you add your own Groq or Gemini key, a language model reads the logic as well."],
 ];
 
-export default function Landing({ onEnter }: { onEnter: () => void }) {
+export default function Landing({ onEnter, onGuide, onDashboard }: Props) {
   return (
     <div className="landing">
       <header className="landing-nav">
-        <div className="landing-brand"><span className="brand-glyph">RP</span> ReviewPilot</div>
-        <button className="btn btn-accent" onClick={onEnter}>Launch app <ArrowRight size={15} /></button>
+        <button className="landing-brand" onClick={onEnter} title="ReviewPilot home">
+          <span className="brand-glyph">RP</span> ReviewPilot
+        </button>
+        <nav className="landing-links">
+          <button onClick={onGuide}>How it works</button>
+          <button onClick={onDashboard}>Dashboard</button>
+          <button className="btn btn-primary" onClick={onEnter}>Open the app</button>
+        </nav>
       </header>
 
-      <motion.section className="landing-hero" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        <div className="landing-pill"><Zap size={13} /> Automated code review for student &amp; indie teams</div>
-        <h1>Code reviews that<br />explain themselves.</h1>
-        <p>
-          ReviewPilot analyzes pasted code, git diffs and real GitHub pull requests with a deterministic
-          rules + AST engine — scored, severity-ranked, and fixable in one click. No black box, no hallucinated line numbers.
+      <section className="landing-hero">
+        <h1>First-pass code review, done in seconds.</h1>
+        <p className="landing-lede">
+          ReviewPilot reads pasted code, git diffs and GitHub pull requests, then tells you in plain
+          language what is wrong, where it is, and how serious it is. It was built so a student team
+          could show their working: every automated finding comes from a rule you can open and read.
         </p>
         <div className="landing-cta">
-          <button className="btn btn-accent btn-large" onClick={onEnter}>Start reviewing — it's live <ArrowRight size={16} /></button>
-          <span className="landing-note">No signup needed · Optional free AI key for deep review</span>
+          <button className="btn btn-primary btn-large" onClick={onEnter}>Start a review</button>
+          <button className="btn btn-ghost btn-large" onClick={onGuide}>Read how it works</button>
         </div>
-        <div className="landing-stats">
-          <div><strong>19</strong><span>analysis rules</span></div>
-          <div><strong>3</strong><span>input modes</span></div>
-          <div><strong>0–100</strong><span>health score</span></div>
-          <div><strong>1-click</strong><span>auto-fix</span></div>
-        </div>
-      </motion.section>
+        <dl className="landing-stats">
+          <div><dt>19</dt><dd>checks run on every review</dd></div>
+          <div><dt>3</dt><dd>ways to submit code</dd></div>
+          <div><dt>0 to 100</dt><dd>health score, with the maths shown</dd></div>
+          <div><dt>15+</dt><dd>automated tests in the repo</dd></div>
+        </dl>
+      </section>
 
-      <section className="landing-grid">
-        {FEATURES.map((f, i) => (
-          <motion.div key={f.title} className="card landing-card" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.12 * i, duration: 0.4 }}>
-            <div className="landing-icon">{f.icon}</div>
-            <h3>{f.title}</h3>
-            <p>{f.text}</p>
-          </motion.div>
+      <section className="landing-features">
+        <h2>What it actually does</h2>
+        {FEATURES.map(([num, title, text]) => (
+          <article key={num} className="landing-feature">
+            <span className="landing-feature-num">{num}</span>
+            <div>
+              <h3>{title}</h3>
+              <p>{text}</p>
+            </div>
+          </article>
         ))}
       </section>
 
-      <footer className="landing-foot">
-        Built as a final-year CSE project · FastAPI + React + Monaco · Deterministic engine, optional LLM enrichment
+      <footer className="landing-footer">
+        <div>
+          <strong>ReviewPilot</strong>
+          <span>Built by a final-year CSE student for placement demonstrations and viva.</span>
+        </div>
+        <nav>
+          <button onClick={onGuide}>How it works</button>
+          <button onClick={onDashboard}>Dashboard</button>
+          <button onClick={onEnter}>Open the app</button>
+        </nav>
+        <div className="landing-contact">
+          <span>Questions: <a href="mailto:reviewpilot.project@gmail.com">reviewpilot.project@gmail.com</a></span>
+          <span>© 2026 ReviewPilot. Source available in the project repository.</span>
+        </div>
       </footer>
     </div>
   );
