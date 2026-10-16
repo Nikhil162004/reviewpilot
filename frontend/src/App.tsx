@@ -621,6 +621,14 @@ export default function App() {
           <div className="topbar-actions">
             {current && <span className={`score-chip ${scoreClass(current.score)}`}>Score {current.score}</span>}
             <span className="status-dot">Engine operational</span>
+            <button
+              className="btn btn-ghost"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+              aria-label="Toggle colour theme"
+            >
+              {theme === "dark" ? "Light" : "Dark"}
+            </button>
             {view === "workspace" && (
               <>
                 <button className="btn btn-ghost" onClick={() => setPaletteOpen(true)}> <span className="kbd-hint">Ctrl K</span></button>
@@ -695,7 +703,7 @@ export default function App() {
                       <Editor
                         value={code}
                         language={monacoLanguage(filename)}
-                        theme="vs-dark"
+                        theme={theme === "light" ? "light" : "vs-dark"}
                         onMount={(editor, monaco) => { editorRef.current = editor; monacoRef.current = monaco; }}
                         onChange={(v) => setCode(v ?? "")}
                         options={{

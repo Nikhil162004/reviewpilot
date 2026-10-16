@@ -645,3 +645,76 @@ h1, h2, .landing-hero h1, .page-head h2, .review-head h2, .wt-title, .brand-name
 .issue-card { border-bottom: 1px solid #1A2130; }
 .topbar { box-shadow: 0 1px 0 #1D2431; }
 .landing-nav a, .landing-nav button { white-space: nowrap; }
+
+/* ================= v10: working light theme =================
+   Root cause of the dead toggle: the v8 dark tokens were declared on :root
+   AFTER the old [data-theme="light"] block with equal specificity, so dark
+   always won. html[data-theme="light"] (0,1,1) outranks :root (0,1,0), and
+   this block also re-skins the surfaces v8/v9 hardcoded to dark hex values. */
+html[data-theme="light"] {
+  --bg: #eef1f6; --surface: #ffffff; --surface-2: #f2f5fa;
+  --border: #[SECURITY_DATA] --border-strong: #bfc9da;
+  --text: #141a26; --text-2: #45536b; --text-3: #71809a;
+  --sidebar: #e8edf5; --sidebar-2: #dde5f0;
+  --accent-soft: rgba(13, 148, 136, 0.12);
+  --critical: #b91c1c; --critical-bg: #fdeeee;
+  --high: #c2410c; --high-bg: #fdf0e6;
+  --medium: #a16207; --medium-bg: #fdf6e0;
+  --low: #5b6b82; --low-bg: #edf1f7;
+  --ok: #15803d; --ok-bg: #e9f9ee;
+  --code-bg: #f5f7fb;
+}
+html[data-theme="light"] body { background: var(--bg); color: var(--text); }
+html[data-theme="light"] .shell { background: var(--bg); }
+html[data-theme="light"] .main { background: #e6ebf3; }
+html[data-theme="light"] .center-pane { background: var(--bg); }
+html[data-theme="light"] .activity,
+html[data-theme="light"] .explorer,
+html[data-theme="light"] .topbar2,
+html[data-theme="light"] .rightpane,
+html[data-theme="light"] .right-panel { background: var(--surface); }
+html[data-theme="light"] .report-head,
+html[data-theme="light"] .walk,
+html[data-theme="light"] .card { border-color: var(--border); box-shadow: 0 1px 2px rgba(20,26,38,.07), 0 8px 22px rgba(20,26,38,.06); }
+html[data-theme="light"] .statusbar { background: var(--surface); color: var(--text-2); }
+html[data-theme="light"] .activity-logo { background: #141a26; color: #ffffff; }
+html[data-theme="light"] .btn-primary { background: #141a26; color: #ffffff; border-color: #141a26; }
+html[data-theme="light"] .btn-accent { color: #ffffff; }
+html[data-theme="light"] .btn-accent:hover { background: #0f766e; color: #ffffff; }
+html[data-theme="light"] .issue-card { border-bottom-color: var(--border); }
+html[data-theme="light"] .inline-thread { border-left-color: #b9c8de; }
+html[data-theme="light"] .skeleton { background: linear-gradient(90deg, var(--surface-2), #dbe3ef, var(--surface-2)); background-size: 220% 100%; }
+html[data-theme="light"] .modal-code, html[data-theme="light"] .deep-text { background: #0d1420; color: #a7e8b0; }
+html[data-theme="light"] .code-view { background: #f5f7fb; }
+html[data-theme="light"] .code-line .txt { color: #26313f; }
+html[data-theme="light"] .code-line .no { color: #8494ad; }
+html[data-theme="light"] .code-line.added { background: #e9f9ee; }
+html[data-theme="light"] .code-line.removed { background: #fdeeee; }
+html[data-theme="light"] .code-line.has-issue { background: #fdf6e0; box-shadow: inset 3px 0 0 var(--medium); }
+html[data-theme="light"] .code-line.has-issue.critical { background: var(--critical-bg); box-shadow: inset 3px 0 0 var(--critical); }
+html[data-theme="light"] .tok-keyword { color: #8250df; } html[data-theme="light"] .tok-string { color: #0a3069; }
+html[data-theme="light"] .tok-comment { color: #59636e; } html[data-theme="light"] .tok-number { color: #0550ae; }
+html[data-theme="light"] .tok-function { color: #8250df; } html[data-theme="light"] .tok-decorator { color: #953800; }
+html[data-theme="light"] .syntax-shell { background: #f5f7fb; }
+html[data-theme="light"] .syntax-highlight { color: #26313f; }
+html[data-theme="light"] .syntax-input::placeholder { color: #9aa7ba; }
+html[data-theme="light"] .terminal { background: #f5f7fb; }
+html[data-theme="light"] .terminal-body { color: #157347; }
+html[data-theme="light"] .monaco-wrap { background: #ffffff; }
+html[data-theme="light"] .monaco-wrap .monaco-editor, html[data-theme="light"] .monaco-wrap .monaco-editor-background { background: #ffffff !important; }
+
+/* v10b: light-mode leftovers — modebar, filename input, gate/notice text,
+   ghost-button hover, and tab pills were still hardcoded dark. */
+html[data-theme="light"] .modebar { background: var(--surface); }
+html[data-theme="light"] .modebar .tabs { background: #e3e9f2; }
+html[data-theme="light"] .modebar .tab.active { background: #ffffff; color: var(--text); box-shadow: 0 1px 3px rgba(20,26,38,.18); }
+html[data-theme="light"] .filename-input { background: #ffffff; color: var(--text); }
+html[data-theme="light"] .btn-ghost:hover { background: #e3e9f2; }
+html[data-theme="light"] .notice-box { background: rgba(13,148,136,.09); color: #0f766e; }
+html[data-theme="light"] .error-box { background: #fdeeee; color: #b91c1c; }
+html[data-theme="light"] .gate.failed, html[data-theme="light"] .gate.failed strong { color: #b91c1c; }
+html[data-theme="light"] .gate.passed, html[data-theme="light"] .gate.passed strong { color: #15803d; }
+html[data-theme="light"] .tabs { background: #e3e9f2; }
+html[data-theme="light"] .tab.active { background: #ffffff; color: var(--text); box-shadow: 0 1px 3px rgba(20,26,38,.18); }
+html[data-theme="light"] .delta-card { background: rgba(13,148,136,.09); color: #0f766e; }
+html[data-theme="light"] .delta-up { color: #0f766e; }
