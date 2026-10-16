@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
-import { CategoryBars, ScoreTrend, SeverityDonut, TopRules } from "./components/Charts";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import Editor from "@monaco-editor/react";
+import { motion } from "framer-motion";
+import {
+  BarChart3, Code2, FileCode2, Gauge, GitPullRequest, HelpCircle, History as HistoryIcon,
+  LayoutDashboard, MessageSquareText, Play, Search, Sparkles, Wand2,
+} from "lucide-react";
+import { CategoryBars, ScoreTrend, SeverityDonut, TopRules, estimatedEffort, qualityGate } from "./components/Charts";
+import CommandPalette, { type PaletteAction } from "./components/CommandPalette";
 import CodeViewer from "./components/CodeViewer";
 import IssuePanel from "./components/IssuePanel";
 import ScoreRing from "./components/ScoreRing";
@@ -32,6 +39,37 @@ function formatDate(iso: string): string {
     d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
 }
 function scoreClass(score: number): string { return score >= 75 ? "good" : score >= 50 ? "mid" : "bad"; }
+
+function monacoLanguage(filename: string): string {
+  if (filename.endsWith(".py")) return "python";
+  if (filename.endsWith(".ts") || filename.endsWith(".tsx")) return "typescript";
+  if (filename.endsWith(".js") || filename.endsWith(".jsx")) return "javascript";
+  if (filename.endsWith(".java")) return "java";
+  if (filename.endsWith(".go")) return "go";
+  if (filename.endsWith(".json")) return "json";
+  return "plaintext";
+}
+
+/** Counts up whenever the value changes — small detail, big product feel. */
+function AnimatedNumber({ value }: { value: number | string }) {
+  const [display, setDisplay] = useState(0);
+  const target = typeof value === "number" ? value : Number(value) || 0;
+  const suffix = typeof value === "string" && value !== String(target) ? value.replace(String(target), "") : "";
+  useEffect(() => {
+    const start = performance.now();
+    const from = 0;
+    let frame = 0;
+    const tick = (now: number) => {
+      const p = Math.min((now - start) / 650, 1);
+      setDisplay(Math.round(from + (target - from) * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target]);
+  if (typeof value === "string" && Number.isNaN(Number(value))) return <>{value}</>;
+  return <>{display}{suffix}</>;
+}
 
 function exportReport(review: ReviewResult) {
   const lines = [
@@ -74,6 +112,18 @@ export default function App() {
     { role: "assistant", text: "I am your review assistant. Run a review, then ask me to explain any finding, suggest a fix, or judge whether this code is safe to merge." },
   ]);
   const [chatInput, setChatInput] = useState("");
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [fixDelta, setFixDelta] = useState<{ before: number; after: number; count: number } | null>(null);
+  const [seeding, setSeeding] = useState(false);
+  const toastTimer = useRef<number | undefined>(undefined);
+  const runReviewRef = useRef<() => Promise<ReviewResult | null>>(async () => null);
+
+  const showToast = useCallback((message: string) => {
+    setToast(message);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 3400);
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
@@ -83,6 +133,16 @@ export default function App() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPaletteOpen((v) => !v); }
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && view === "workspace") { e.preventDefault(); void runReviewRef.current(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
 
   const pushLog = (line: string) =>
     setLogs((prev) => [...prev.slice(-40), `[${new Date().toLocaleTimeString()}] ${line}`]);
@@ -125,11 +185,13 @@ export default function App() {
     } finally { setRunning(false); }
   };
 
+  runReviewRef.current = () => runReview();
+
   const applyAutoFix = async () => {
     if (mode !== "code") { setError("Auto-fix works in Paste code mode. Switch to a workspace file first."); return; }
     setFixing(true); setError(null);
     try {
-      const before = current && centerMode === "report" ? current.score : null;
+      const before = current ? current.score : null;
       const result = await api.applyFixes(code, filename);
       if (!result.applied.length) {
         setFixNotice("No safe automatic fixes for this code — the remaining issues need a human decision. See the issue list for guidance.");
@@ -140,6 +202,8 @@ export default function App() {
       setCenterMode("editor");
       pushLog(`auto-fix applied ${result.applied.length} fix(es): ${result.applied.map((f) => f.rule_id).join(", ")}`);
       const after = await runReview(result.fixed_code);
+      if (before !== null && after) setFixDelta({ before, after: after.score, count: result.applied.length });
+      if (after) showToast(`Auto-fix complete — score ${before ?? "—"} → ${after.score}`);
       setFixNotice(
         `Applied ${result.applied.length} fix(es): ${result.applied.map((f) => f.description).join(" · ")}` +
         (before !== null && after ? `  Score ${before} → ${after.score}.` : ""),
@@ -196,9 +260,41 @@ export default function App() {
     setChatInput("");
   };
 
+  const seedDemo = async () => {
+    setSeeding(true);
+    try {
+      await api.reviewCode(SAMPLE_CODE, "app.py", "Demo · vulnerable service");
+      await api.reviewCode(SAMPLE_CLEAN, "clean_utils.py", "Demo · clean utilities");
+      await api.reviewCode(SAMPLE_JS, "server.js", "Demo · express API");
+      await api.reviewCode(SAMPLE_CODE.replace("process_orders", "process_payments"), "payments.py", "Demo · payments module");
+      await refresh();
+      showToast("Demo dataset generated — 4 real reviews analyzed and stored");
+      pushLog("demo dataset generated (4 reviews)");
+    } catch {
+      showToast("Could not generate demo data — is the API running?");
+    } finally { setSeeding(false); }
+  };
+
+  const paletteActions: PaletteAction[] = [
+    { id: "run", label: "Run review", hint: "Ctrl+Enter", run: () => { setView("workspace"); void runReview(); } },
+    { id: "fix", label: "Auto-fix current code", hint: "Engine", run: () => { setView("workspace"); void applyAutoFix(); } },
+    { id: "dash", label: "Go to dashboard", hint: "View", run: () => setView("dashboard") },
+    { id: "workspace", label: "Go to review workspace", hint: "View", run: () => setView("workspace") },
+    { id: "history", label: "Go to review history", hint: "View", run: () => setView("history") },
+    { id: "seed", label: "Generate demo dataset", hint: "Data", run: () => void seedDemo() },
+    ...SAMPLE_FILES.map((f) => ({
+      id: `file-${f.name}`, label: `Open ${f.label}`, hint: "Workspace file",
+      run: () => { setView("workspace"); setCode(f.code); setFilename(f.filename); setActiveSample(f.name); setMode("code"); setCenterMode("editor"); },
+    })),
+    ...history.slice(0, 8).map((r) => ({
+      id: `review-${r.id}`, label: `Open review — ${r.title}`, hint: `Score ${r.score}`,
+      run: () => openReview(r),
+    })),
+  ];
+
   const severityTotal = current?.issues.length || 1;
 
-  const navItem = (v: View, icon: string, label: string) => (
+  const navItem = (v: View, icon: ReactNode, label: string) => (
     <button className={`activity-btn ${view === v ? "active" : ""}`} onClick={() => setView(v)} title={label}>
       <span className="activity-icon">{icon}</span><span className="activity-label">{label}</span>
     </button>
@@ -206,13 +302,18 @@ export default function App() {
 
   return (
     <div className="shell">
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} actions={paletteActions} />
+      {toast && <motion.div className="toast" role="status" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>{toast}</motion.div>}
       {/* Activity bar */}
       <aside className="activity">
-        <div className="activity-logo">{"</>"}</div>
-        {navItem("workspace", "◈", "Review")}
-        {navItem("dashboard", "▦", "Dash")}
-        {navItem("history", "≡", "History")}
-        {navItem("how", "?", "Guide")}
+        <div className="activity-logo"><Code2 size={19} strokeWidth={2.6} /></div>
+        {navItem("workspace", <Code2 size={19} />, "Review")}
+        {navItem("dashboard", <LayoutDashboard size={19} />, "Dash")}
+        {navItem("history", <HistoryIcon size={19} />, "History")}
+        {navItem("how", <HelpCircle size={19} />, "Guide")}
+        <button className="activity-btn" onClick={() => setPaletteOpen(true)} title="Command palette (Ctrl+K)">
+          <span className="activity-icon"><Search size={18} /></span><span className="activity-label">Search</span>
+        </button>
         <div className="activity-bottom"><div className="avatar">AK</div></div>
       </aside>
 
@@ -224,7 +325,7 @@ export default function App() {
           {SAMPLE_FILES.map((f) => (
             <button key={f.name} className={`explorer-file ${activeSample === f.name && mode === "code" ? "active" : ""}`}
               onClick={() => { setCode(f.code); setFilename(f.filename); setActiveSample(f.name); setMode("code"); setCenterMode("editor"); }}>
-              <span className="file-dot" data-lang={f.filename.endsWith(".js") ? "js" : "py"}>{f.filename.endsWith(".js") ? "JS" : "Py"}</span>
+              <span className="file-dot" data-lang={f.filename.endsWith(".js") ? "js" : "py"}><FileCode2 size={12} /></span>
               <span className="explorer-file-name">{f.label}</span>
             </button>
           ))}
@@ -255,8 +356,9 @@ export default function App() {
             <span className="status-dot">Engine operational</span>
             {view === "workspace" && (
               <>
-                <button className="btn btn-ghost" onClick={applyAutoFix} disabled={fixing || running}>⚡ {fixing ? "Fixing…" : "Auto-fix"}</button>
-                <button className="btn btn-accent" onClick={() => runReview()} disabled={running}>{running ? "Analyzing…" : "Run review"}</button>
+                <button className="btn btn-ghost" onClick={() => setPaletteOpen(true)}><Search size={15} /> <span className="kbd-hint">Ctrl K</span></button>
+                <button className="btn btn-ghost" onClick={applyAutoFix} disabled={fixing || running}><Wand2 size={15} /> {fixing ? "Fixing…" : "Auto-fix"}</button>
+                <button className="btn btn-accent" onClick={() => runReview()} disabled={running}><Play size={15} /> {running ? "Analyzing…" : "Run review"}</button>
               </>
             )}
           </div>
@@ -268,7 +370,7 @@ export default function App() {
               <div className="tabs">
                 <button className={`tab ${mode === "code" ? "active" : ""}`} onClick={() => setMode("code")}>Code</button>
                 <button className={`tab ${mode === "diff" ? "active" : ""}`} onClick={() => setMode("diff")}>Git diff</button>
-                <button className={`tab ${mode === "github" ? "active" : ""}`} onClick={() => setMode("github")}>GitHub PR</button>
+                <button className={`tab ${mode === "github" ? "active" : ""}`} onClick={() => setMode("github")}><GitPullRequest size={13} /> GitHub PR</button>
               </div>
               <div className="tabs">
                 <button className={`tab ${centerMode === "editor" ? "active" : ""}`} onClick={() => setCenterMode("editor")}>Editor</button>
@@ -312,7 +414,23 @@ export default function App() {
                       <SyntaxEditor value={diff} onChange={setDiff} placeholder={"diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1,3 +1,4 @@\n+new_code_here()"} />
                     </div>
                   ) : (
-                    <SyntaxEditor value={code} onChange={setCode} placeholder="Paste code here, or pick a workspace file on the left…" />
+                    <div className="monaco-wrap">
+                      <Editor
+                        value={code}
+                        language={monacoLanguage(filename)}
+                        theme="vs-dark"
+                        onChange={(v) => setCode(v ?? "")}
+                        options={{
+                          minimap: { enabled: true, maxColumn: 60 },
+                          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+                          fontSize: 13, lineHeight: 1.7, padding: { top: 12 },
+                          scrollBeyondLastLine: false, automaticLayout: true,
+                          renderLineHighlight: "all", smoothScrolling: true,
+                          cursorBlinking: "smooth", wordWrap: "on",
+                        }}
+                        loading={<div className="empty">Loading editor…</div>}
+                      />
+                    </div>
                   )
                 ) : current ? (
                   <div style={{ padding: 18, overflowY: "auto" }}>
@@ -327,6 +445,23 @@ export default function App() {
                             <span key={sev} style={{ width: `${((current.stats[sev] ?? 0) / severityTotal) * 100}%`, background: SEVERITY_COLORS[sev] }} />
                           ))}
                         </div>
+                        {(() => {
+                          const gate = qualityGate(current);
+                          return (
+                            <div className={`gate ${gate.passed ? "passed" : "failed"}`}>
+                              <strong>{gate.passed ? "✓ Quality gate PASSED" : "✕ Quality gate FAILED"}</strong>
+                              <span>{gate.passed ? "Meets merge thresholds (score ≥ 75, no criticals)" : gate.reasons.join(" · ")}</span>
+                              <span className="gate-effort">Est. fix effort: {estimatedEffort(current)}</span>
+                            </div>
+                          );
+                        })()}
+                        {fixDelta && (
+                          <div className="delta-card">
+                            <span>Auto-fix impact</span>
+                            <strong>{fixDelta.before} → {fixDelta.after}</strong>
+                            <span className="delta-up">▲ {fixDelta.after - fixDelta.before} points · {fixDelta.count} fix(es) applied</span>
+                          </div>
+                        )}
                       </div>
                       <button className="btn btn-ghost" onClick={() => exportReport(current)}>Export .md</button>
                     </div>
@@ -352,9 +487,9 @@ export default function App() {
               {/* Right panel */}
               <aside className="rightpane">
                 <div className="righttabs">
-                  <button className={rightTab === "issues" ? "active" : ""} onClick={() => setRightTab("issues")}>Issues{current ? ` (${current.issues.length})` : ""}</button>
-                  <button className={rightTab === "chat" ? "active" : ""} onClick={() => setRightTab("chat")}>AI Assistant</button>
-                  <button className={rightTab === "metrics" ? "active" : ""} onClick={() => setRightTab("metrics")}>Metrics</button>
+                  <button className={rightTab === "issues" ? "active" : ""} onClick={() => setRightTab("issues")}><Gauge size={13} /> Issues{current ? ` (${current.issues.length})` : ""}</button>
+                  <button className={rightTab === "chat" ? "active" : ""} onClick={() => setRightTab("chat")}><MessageSquareText size={13} /> AI Assistant</button>
+                  <button className={rightTab === "metrics" ? "active" : ""} onClick={() => setRightTab("metrics")}><BarChart3 size={13} /> Metrics</button>
                 </div>
                 {rightTab === "issues" && (
                   current
@@ -422,13 +557,14 @@ export default function App() {
             <div className="page-head">
               <div><h2>Code review overview</h2><p>Deterministic analysis — reproducible, explainable, and scored. No black box.</p></div>
               <div className="spacer" />
+              <button className="btn btn-ghost" onClick={seedDemo} disabled={seeding}><Sparkles size={15} /> {seeding ? "Generating…" : "Generate demo dataset"}</button>
               <button className="btn btn-accent" onClick={() => setView("workspace")}>Open review workspace</button>
             </div>
             <div className="stats-grid">
-              <div className="card stat-card"><div className="stat-label">Total reviews</div><div className="stat-value">{stats?.total_reviews ?? 0}</div><div className="stat-hint">Stored in local history</div></div>
-              <div className="card stat-card"><div className="stat-label">Average score</div><div className="stat-value">{stats?.average_score ?? "—"}</div><div className="stat-hint">Out of 100</div></div>
-              <div className="card stat-card"><div className="stat-label">Critical issues found</div><div className="stat-value" style={{ color: stats?.critical_issues ? "#f85149" : undefined }}>{stats?.critical_issues ?? 0}</div><div className="stat-hint">Secrets, injection, unsafe code</div></div>
-              <div className="card stat-card"><div className="stat-label">Files analyzed</div><div className="stat-value">{stats?.files_analyzed ?? 0}</div><div className="stat-hint">Across all reviews</div></div>
+              <div className="card stat-card"><div className="stat-label">Total reviews</div><div className="stat-value"><AnimatedNumber value={stats?.total_reviews ?? 0} /></div><div className="stat-hint">Stored in local history</div></div>
+              <div className="card stat-card"><div className="stat-label">Average score</div><div className="stat-value"><AnimatedNumber value={stats?.average_score ?? 0} /></div><div className="stat-hint">Out of 100</div></div>
+              <div className="card stat-card"><div className="stat-label">Critical issues found</div><div className="stat-value" style={{ color: stats?.critical_issues ? "#f85149" : undefined }}><AnimatedNumber value={stats?.critical_issues ?? 0} /></div><div className="stat-hint">Secrets, injection, unsafe code</div></div>
+              <div className="card stat-card"><div className="stat-label">Files analyzed</div><div className="stat-value"><AnimatedNumber value={stats?.files_analyzed ?? 0} /></div><div className="stat-hint">Across all reviews</div></div>
             </div>
             <div className="analytics-grid">
               <div className="card card-pad"><div className="section-title">Issue severity mix</div><div className="section-sub" style={{ marginBottom: 12 }}>Across all stored reviews</div><SeverityDonut reviews={history} /></div>
