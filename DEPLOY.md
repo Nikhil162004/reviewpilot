@@ -4,8 +4,8 @@ Two services, both on the free tier:
 
 | Service | Type | URL (default names) |
 | --- | --- | --- |
-| `reviewpilot-api` | Python web service (FastAPI) | `https://reviewpilot-api.onrender.com` |
-| `reviewpilot-web` | Static site (React) | `https://reviewpilot-web.onrender.com` |
+| `reviewpilot-api` | Python web service (FastAPI) | `https://reviewpilot-api-njpa.onrender.com` |
+| `reviewpilot-web` | Static site (React) | `https://reviewpilot-web-qxjw.onrender.com` |
 
 The frontend calls `/api/...` on its own origin; a Render rewrite in
 `render.yaml` forwards those calls to the API service, so there are no
@@ -32,8 +32,8 @@ git push -u origin master
 
 ## Step 3 — Open it
 
-Visit `https://reviewpilot-web.onrender.com` once the static site is live.
-The API health check is at `https://reviewpilot-api.onrender.com/api/health`.
+Live now: https://reviewpilot-web-qxjw.onrender.com
+API health: https://reviewpilot-api-njpa.onrender.com/api/health
 
 ## Things to know
 
