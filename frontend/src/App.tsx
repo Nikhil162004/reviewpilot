@@ -10,6 +10,7 @@ import CommandPalette, { type PaletteAction } from "./components/CommandPalette"
 import CodeViewer from "./components/CodeViewer";
 import IssuePanel from "./components/IssuePanel";
 import ScoreRing from "./components/ScoreRing";
+import Walkthrough from "./components/Walkthrough";
 import SyntaxEditor from "./components/SyntaxEditor";
 import { api } from "./lib/api";
 import { SAMPLE_CLEAN, SAMPLE_CODE, SAMPLE_DIFF, SAMPLE_JS } from "./lib/sample";
@@ -91,6 +92,7 @@ export default function App() {
   const [history, setHistory] = useState<ReviewResult[]>([]);
   const [current, setCurrent] = useState<ReviewResult | null>(null);
   const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [resolvedIds, setResolvedIds] = useState<Set<string>>(new Set());
 
   const [mode, setMode] = useState<InputMode>("code");
   const [centerMode, setCenterMode] = useState<CenterMode>("editor");
@@ -183,6 +185,7 @@ export default function App() {
 
   const openReview = (review: ReviewResult) => {
     setCurrent(review);
+    setResolvedIds(new Set());
     setSelectedIssue(review.issues[0] ?? null);
     setCenterMode("report");
     setRightTab("issues");
@@ -524,9 +527,14 @@ export default function App() {
                       </div>
                       <button className="btn btn-ghost" onClick={() => exportReport(current)}>Export .md</button>
                     </div>
+                    <Walkthrough review={current} />
                     {current.file_contents.map((file) => (
                       <div key={file.path} id={`file-${file.path}`}>
-                        <CodeViewer file={file} issues={current.issues} selectedIssueId={selectedIssue?.id ?? null} onSelectIssue={setSelectedIssue} />
+                        <CodeViewer
+                          file={file} issues={current.issues} selectedIssueId={selectedIssue?.id ?? null}
+                          onSelectIssue={setSelectedIssue} resolvedIds={resolvedIds}
+                          onResolve={(issue) => { setResolvedIds((prev) => new Set(prev).add(issue.id)); showToast(`Resolved ${issue.rule_id} — ${issue.title}`); }}
+                        />
                       </div>
                     ))}
                   </div>
