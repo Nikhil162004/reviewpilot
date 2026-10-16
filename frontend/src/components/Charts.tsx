@@ -14,7 +14,7 @@ export function SeverityDonut({ reviews }: { reviews: ReviewResult[] }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 22 }}>
       <svg width="132" height="132" viewBox="0 0 132 132">
-        <circle cx="66" cy="66" r={R} fill="none" stroke="#eceef2" strokeWidth="15" />
+        <circle cx="66" cy="66" r={R} fill="none" stroke="#1c2534" strokeWidth="15" />
         {total > 0 && (Object.keys(totals) as Array<keyof typeof totals>).map((key) => {
           const frac = totals[key] / total;
           const el = (
@@ -25,14 +25,14 @@ export function SeverityDonut({ reviews }: { reviews: ReviewResult[] }) {
           offset += frac;
           return el;
         })}
-        <text x="66" y="63" textAnchor="middle" style={{ fontSize: 22, fontWeight: 750, fill: "#131722" }}>{total}</text>
+        <text x="66" y="63" textAnchor="middle" style={{ fontSize: 22, fontWeight: 750, fill: "#e6edf3" }}>{total}</text>
         <text x="66" y="80" textAnchor="middle" style={{ fontSize: 10, fill: "#8a94a3", fontWeight: 600 }}>ISSUES</text>
       </svg>
       <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
         {(Object.keys(totals) as Array<keyof typeof totals>).map((key) => (
           <div key={key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
             <span style={{ width: 9, height: 9, borderRadius: 3, background: COLORS[key] }} />
-            <span style={{ textTransform: "capitalize", color: "#5b6472", width: 62 }}>{key}</span>
+            <span style={{ textTransform: "capitalize", color: "#94a3b8", width: 62 }}>{key}</span>
             <strong>{totals[key]}</strong>
           </div>
         ))}
@@ -53,7 +53,7 @@ export function ScoreTrend({ reviews }: { reviews: ReviewResult[] }) {
       {points.map((r, i) => {
         const x = (i / (points.length - 1)) * (W - 16) + 8;
         const y = H - 10 - (r.score / max) * (H - 24);
-        return <g key={r.id}><circle cx={x} cy={y} r="3.6" fill="#fff" stroke="#0e7490" strokeWidth="2.2" /><text x={x} y={y - 8} textAnchor="middle" style={{ fontSize: 9.5, fill: "#5b6472", fontWeight: 700 }}>{r.score}</text></g>;
+        return <g key={r.id}><circle cx={x} cy={y} r="3.6" fill="#fff" stroke="#0e7490" strokeWidth="2.2" /><text x={x} y={y - 8} textAnchor="middle" style={{ fontSize: 9.5, fill: "#94a3b8", fontWeight: 700 }}>{r.score}</text></g>;
       })}
     </svg>
   );
@@ -68,7 +68,7 @@ export function CategoryBars({ scores }: { scores: Record<string, number> }) {
             <span style={{ textTransform: "capitalize", fontWeight: 600 }}>{cat}</span>
             <span className="mono" style={{ fontWeight: 700, color: score >= 75 ? "#15803d" : score >= 50 ? "#b45309" : "#c81e1e" }}>{score}/100</span>
           </div>
-          <div style={{ height: 8, background: "#eceef2", borderRadius: 99, overflow: "hidden" }}>
+          <div style={{ height: 8, background: "#1c2534", borderRadius: 99, overflow: "hidden" }}>
             <div style={{ width: `${score}%`, height: "100%", background: COLORS[cat] ?? "#0e7490", borderRadius: 99, transition: "width .5s" }} />
           </div>
         </div>
@@ -96,7 +96,7 @@ export function TopRules({ reviews }: { reviews: ReviewResult[] }) {
             <span style={{ color: "#3c4554", flex: 1 }}>{v.title}</span>
             <strong>{v.count}×</strong>
           </div>
-          <div style={{ height: 6, background: "#eceef2", borderRadius: 99 }}>
+          <div style={{ height: 6, background: "#1c2534", borderRadius: 99 }}>
             <div style={{ width: `${(v.count / max) * 100}%`, height: "100%", borderRadius: 99, background: COLORS[v.severity] ?? "#94a3b8" }} />
           </div>
         </div>

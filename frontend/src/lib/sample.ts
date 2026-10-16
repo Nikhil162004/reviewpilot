@@ -41,6 +41,41 @@ def parse(data):
         pass
 `;
 
+export const SAMPLE_CLEAN = `"""Small, well-structured utilities — a good baseline review."""
+
+import os
+from dataclasses import dataclass
+
+
+@dataclass
+class Point:
+    x: float
+    y: float
+
+    def distance_to(self, other: "Point") -> float:
+        return ((self.x - other.x) ** 2 + (self.y - other.y) ** 2) ** 0.5
+
+
+def load_config() -> dict:
+    """Read configuration from the environment, never from literals."""
+    return {"api_key": os.environ.get("API_KEY", ""), "debug": False}
+`;
+
+export const SAMPLE_JS = `const express = require("express");
+const app = express();
+
+const API_SECRET = "[SECURITY_DATA]";
+
+app.get("/user", (req, res) => {
+  const id = req.query.id;
+  document.getElementById("out").innerHTML = id;
+  console.log("user id", id);
+  const query = "SELECT * FROM users WHERE id = " + id;
+  db.query(query);
+  res.send("ok");
+});
+`;
+
 export const SAMPLE_DIFF = `diff --git a/payments.py b/payments.py
 --- a/payments.py
 +++ b/payments.py

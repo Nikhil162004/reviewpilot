@@ -5,9 +5,17 @@ import json
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.models.schemas import CodeReviewRequest, DiffReviewRequest, GitHubPRRequest, ReviewResult
+from app.models.schemas import (
+    CodeReviewRequest,
+    DiffReviewRequest,
+    FixRequest,
+    FixResult,
+    GitHubPRRequest,
+    ReviewResult,
+)
 from app.services import github_service, llm_service, store
 from app.services.analyzer import analyze_code, analyze_diff
+from app.services.autofix import apply_fixes
 from app.services.diff_parser import parse_unified_diff
 
 app = FastAPI(title="PR Review Assistant", version="1.0.0")
@@ -58,6 +66,23 @@ def review_github_pr(payload: GitHubPRRequest) -> ReviewResult:
     if not files:
         raise HTTPException(status_code=422, detail="That PR has no parseable file changes.")
     return _finalize(analyze_diff(files, title))
+
+
+@app.post("/api/fix", response_model=FixResult)
+def fix_code(payload: FixRequest) -> FixResult:
+    fixed, applied = apply_fixes(payload.code, payload.filename)
+    return FixResult(
+        fixed_code=fixed,
+        applied=[{"rule_id": f.rule_id, "description": f.description, "line": f.line} for f in applied],
+    )
+
+
+@app.get("/api/github/prs")
+def github_prs(repo: str) -> list[dict]:
+    try:
+        return github_service.list_open_prs(repo)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/api/reviews")

@@ -39,4 +39,15 @@ export const api = {
 
   listReviews: () => request<ReviewResult[]>("/api/reviews"),
   getStats: () => request<DashboardStats>("/api/stats"),
+
+  applyFixes: (code: string, filename: string) =>
+    request<{ fixed_code: string; applied: Array<{ rule_id: string; description: string; line: number }> }>(
+      "/api/fix",
+      { method: "POST", body: JSON.stringify({ code, filename }) },
+    ),
+
+  listGitHubPRs: (repo: string) =>
+    request<Array<{ number: number; title: string; author: string; url: string; updated_at: string }>>(
+      `/api/github/prs?repo=${encodeURIComponent(repo)}`,
+    ),
 };

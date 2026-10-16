@@ -82,3 +82,19 @@ class DiffReviewRequest(BaseModel):
 
 class GitHubPRRequest(BaseModel):
     url: str = Field(min_length=10, max_length=500)
+
+
+class FixRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=200_000)
+    filename: str = "main.py"
+
+
+class AppliedFixOut(BaseModel):
+    rule_id: str
+    description: str
+    line: int
+
+
+class FixResult(BaseModel):
+    fixed_code: str
+    applied: list[AppliedFixOut]
