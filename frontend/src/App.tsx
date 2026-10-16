@@ -708,6 +708,7 @@ export default function App() {
                         onChange={(v) => setCode(v ?? "")}
                         options={{
                           minimap: { enabled: false },
+                          scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10, useShadows: false },
                           fontFamily: "'JetBrains Mono', ui-monospace, monospace",
                           fontSize: 13, lineHeight: 1.7, padding: { top: 12 },
                           scrollBeyondLastLine: false, automaticLayout: true,

@@ -718,3 +718,31 @@ html[data-theme="light"] .tabs { background: #e3e9f2; }
 html[data-theme="light"] .tab.active { background: #ffffff; color: var(--text); box-shadow: 0 1px 3px rgba(20,26,38,.18); }
 html[data-theme="light"] .delta-card { background: rgba(13,148,136,.09); color: #0f766e; }
 html[data-theme="light"] .delta-up { color: #0f766e; }
+
+/* ================= v11: modern scrollbars =================
+   Thin floating-pill thumbs, transparent tracks, no arrow buttons.
+   Colours come from theme tokens so dark/light both stay consistent.
+   Firefox uses scrollbar-width/color; Chromium/WebKit the pseudo-elements;
+   Monaco draws its own bars, so its slider is restyled separately. */
+:root { --sb-thumb: #39445a; --sb-thumb-hover: #5a6b8c; }
+html[data-theme="light"] { --sb-thumb: #b7c2d6; --sb-thumb-hover: #8fa1bd; }
+* { scrollbar-width: thin; scrollbar-color: var(--sb-thumb) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--sb-thumb); border-radius: 99px;
+  border: 3px solid transparent; background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--sb-thumb-hover); }
+::-webkit-scrollbar-thumb:active { background-color: var(--accent); }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+.monaco-editor .scrollbar .slider { border-radius: 99px; background: rgba(147, 160, 180, 0.35); }
+.monaco-editor .scrollbar .slider:hover { background: rgba(147, 160, 180, 0.55); }
+.monaco-editor .scrollbar .slider.active { background: var(--accent); }
+html[data-theme="light"] .monaco-editor .scrollbar .slider { background: rgba(20, 26, 38, 0.22); }
+html[data-theme="light"] .monaco-editor .scrollbar .slider:hover { background: rgba(20, 26, 38, 0.38); }
+html[data-theme="light"] .inline-thread { background: #ffffff; border-color: var(--border-strong); border-left: 3px solid var(--medium); }
+html[data-theme="light"] .inline-thread.resolved { border-left-color: var(--ok); }
+html[data-theme="light"] .thread-title { color: var(--text); }
+html[data-theme="light"] .thread-fix { background: #0d1420; }
