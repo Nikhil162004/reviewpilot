@@ -42,7 +42,7 @@ services:
       # directly, so there are no CORS issues in production.
       - type: rewrite
         source: /api/*
-        destination: https://reviewpilot-api.onrender.com/api/*
+        destination: https://reviewpilot-api-njpa.onrender.com/api/*
       # SPA fallback: let the app render its own views (and custom 404).
       - type: rewrite
         source: /*
