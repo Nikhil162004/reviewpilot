@@ -746,3 +746,79 @@ html[data-theme="light"] .inline-thread { background: #ffffff; border-color: var
 html[data-theme="light"] .inline-thread.resolved { border-left-color: var(--ok); }
 html[data-theme="light"] .thread-title { color: var(--text); }
 html[data-theme="light"] .thread-fix { background: #0d1420; }
+
+/* ================= v12: responsive pass (phones -> large monitors) ==========
+   Findings from a device sweep: the report header crushed its title to a
+   one-word column on phones, wide tables clipped their last columns, the
+   activity rail clipped its logo, and small inputs triggered iOS zoom. */
+.field input, .field select { width: 100%; background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--text); border-radius: 8px; padding: 9px 12px; outline: none; }
+.field input:focus, .field select:focus { border-color: var(--accent); }
+@media (max-width: 1100px) {
+  .workspace-grid { grid-template-columns: minmax(0, 1fr) 300px; }
+}
+@media (max-width: 860px) {
+  .activity { justify-content: flex-start; scrollbar-width: none; }
+  .activity::-webkit-scrollbar { display: none; }
+  .activity > * { flex-shrink: 0; }
+  .activity-logo { width: 32px; height: 32px; margin-right: 4px; }
+  .topbar2 { flex-wrap: wrap; row-gap: 8px; padding: 10px 12px; height: auto; }
+  .topbar-actions { flex-wrap: wrap; gap: 6px; margin-left: auto; }
+  .modebar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 8px 10px; }
+  .modebar::-webkit-scrollbar { display: none; }
+  .modebar .tabs, .modebar > .btn { flex-shrink: 0; }
+  .review-head { grid-template-columns: 72px minmax(0, 1fr); gap: 12px 14px; padding: 16px; align-items: start; }
+  .review-head > div:last-child { grid-column: 1 / -1; flex-direction: row !important; flex-wrap: wrap; }
+  .review-head > div:last-child .btn { flex: 1 1 31%; justify-content: center; }
+  .gate, .delta-card, .sev-bar { max-width: 100%; }
+  .table { display: block; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+  .table td:first-child { white-space: normal; min-width: 150px; }
+  .page-head { flex-wrap: wrap; gap: 10px; }
+  .page-head .spacer { display: none; }
+  .history-controls { flex-wrap: wrap; }
+  .history-controls > * { flex: 1 1 150px; }
+  .modal-backdrop, .palette-backdrop { padding: 10px; }
+  .modal { padding: 18px; max-height: calc(100dvh - 20px); overflow-y: auto; }
+  .landing { padding: 0 16px 32px; }
+  .landing-footer { grid-template-columns: 1fr; }
+  input:not(.inputarea), select, textarea:not(.inputarea) { font-size: 16px; }
+}
+@media (max-width: 480px) {
+  .activity-label { display: none; }
+  .activity-btn { width: auto; padding: 6px 8px; }
+  .crumbs span:last-child { max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom; }
+  .kpi-strip { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .review-head h2 { font-size: 16px; }
+  .wt-ratings, .walk-ratings { grid-template-columns: 1fr 1fr !important; }
+  .landing-hero h1 { font-size: 32px; }
+  .landing-stats { gap: 20px; }
+  .notfound h1 { font-size: 26px; }
+  .btn { padding: 8px 12px; }
+}
+@media (pointer: coarse) {
+  .tab, .btn, .activity-btn, .explorer-file { min-height: 40px; }
+  .tab { display: inline-flex; align-items: center; }
+}
+@media (min-width: 1800px) {
+  .content { max-width: 1500px; margin: 0 auto; width: 100%; }
+}
+
+/* v12b: flex/grid min-width trap — wide children (tables, code) were forcing
+   .content/.workspace-grid wider than the phone screen (781px @ 390px). */
+.shell, .maincol, .content, .centerpane, .center-pane, .workspace-grid, .rightpane, .right-panel { min-width: 0; }
+.maincol { flex: 1 1 auto; }
+@media (max-width: 860px) {
+  .workspace-grid { grid-template-columns: 1fr; }
+}
+
+/* v12c: .content's margin:0 auto made it fit-content inside the flex column,
+   so wide children stretched it past the viewport on phones. */
+@media (max-width: 860px) {
+  .content { width: 100%; margin: 0; }
+  .review-head { grid-template-columns: 92px minmax(0, 1fr); }
+}
+
+/* v12d: landing nav at phone widths — keep brand + primary CTA only */
+@media (max-width: 640px) {
+  .landing-links button:not(.btn) { display: none; }
+  .landing-links .btn-primary { white-space: nowrap; }
+}
