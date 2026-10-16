@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { copyText } from "../lib/clipboard";
 import type { FileContent, Issue } from "../lib/types";
 
 interface Props {
@@ -22,7 +23,7 @@ export default function CodeViewer({ file, issues, selectedIssueId, onSelectIssu
 
   const copyFix = async (issue: Issue) => {
     if (!issue.suggested_fix) return;
-    await navigator.clipboard.writeText(issue.suggested_fix);
+    await copyText(issue.suggested_fix);
     setCopiedId(issue.id);
     setTimeout(() => setCopiedId(null), 1500);
   };

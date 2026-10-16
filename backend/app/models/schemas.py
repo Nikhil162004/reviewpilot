@@ -12,7 +12,7 @@ _SAFE_FILE = re.compile(r"^[A-Za-z0-9_./ -]{1,160}$")
 
 def _clean_text(value: str) -> str:
     # Strip angle brackets / control chars from display-bound text (XSS hygiene).
-    cleaned = re.sub(r"[< >\x00-\x1f]", "", value).strip()
+    cleaned = re.sub(r"[<>\x00-\x1f]", "", value).strip()
     return cleaned or "untitled"
 
 

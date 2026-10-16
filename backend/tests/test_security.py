@@ -35,3 +35,11 @@ def test_path_traversal_filename_rejected():
         "code": "x = 1\n", "filename": "../../etc/passwd", "title": "t",
     })
     assert resp.status_code == 422
+
+
+def test_title_keeps_spaces_but_strips_markup():
+    from app.models.schemas import CodeReviewRequest
+    r = CodeReviewRequest(title="Review of my file.py", code="x = 1\n", filename="app.py")
+    assert r.title == "Review of my file.py"
+    r2 = CodeReviewRequest(title="Bad<script> title", code="x = 1\n", filename="app.py")
+    assert "<" not in (r2.title or "") and ">" not in (r2.title or "")

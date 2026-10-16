@@ -1,4 +1,4 @@
-"""FastAPI application - PR Review Assistant API."""
+"""FastAPI application - ReviewPilot API."""
 
 import hashlib
 import hmac
@@ -31,7 +31,7 @@ from app.services.testgen import generate_tests
 
 _DEBUG = os.environ.get("APP_DEBUG", "").lower() == "true"
 app = FastAPI(
-    title="PR Review Assistant", version="2.0.0",
+    title="ReviewPilot", version="2.0.0",
     docs_url="/docs" if _DEBUG else None,
     redoc_url=None,
     openapi_url="/openapi.json" if _DEBUG else None,

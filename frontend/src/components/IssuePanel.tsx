@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { copyText } from "../lib/clipboard";
 import type { Issue, Severity } from "../lib/types";
 
 const FILTERS: Array<"all" | Severity> = ["all", "critical", "high", "medium", "low"];
@@ -20,7 +21,7 @@ export default function IssuePanel({ issues, selectedIssueId, onSelectIssue }: P
 
   const copyFix = async (issue: Issue) => {
     if (!issue.suggested_fix) return;
-    await navigator.clipboard.writeText(issue.suggested_fix);
+    await copyText(issue.suggested_fix);
     setCopiedId(issue.id);
     setTimeout(() => setCopiedId(null), 1600);
   };
@@ -50,7 +51,7 @@ export default function IssuePanel({ issues, selectedIssueId, onSelectIssue }: P
             <div className="issue-title">{issue.title}</div>
             <div className="issue-loc">{issue.file}:{issue.line}</div>
             <p className="issue-msg">{issue.message}</p>
-            <p className="issue-msg"><strong style={{ color: "#131722" }}>Recommendation:</strong> {issue.suggestion}</p>
+            <p className="issue-msg"><strong>Recommendation</strong>{issue.suggestion}</p>
             {issue.suggested_fix && (
               <details className="issue-fix" onClick={(e) => e.stopPropagation()}>
                 <summary>

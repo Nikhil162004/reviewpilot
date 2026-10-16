@@ -20,7 +20,7 @@ export function SeverityDonut({ reviews }: { reviews: ReviewResult[] }) {
   for (const r of reviews) for (const k of Object.keys(totals) as Array<keyof typeof totals>) totals[k] += r.stats[k] ?? 0;
   const data = Object.entries(totals).map(([name, value]) => ({ name, value })).filter((d) => d.value > 0);
   const total = data.reduce((a, d) => a + d.value, 0);
-  if (!total) return <div className="section-sub">No findings yet — run a review or generate the demo dataset.</div>;
+  if (!total) return <div className="section-sub">No findings yet — run a review to populate this chart.</div>;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
       <div style={{ width: 148, height: 148, position: "relative", flexShrink: 0 }}>
@@ -50,7 +50,7 @@ export function SeverityDonut({ reviews }: { reviews: ReviewResult[] }) {
 
 export function ScoreTrend({ reviews }: { reviews: ReviewResult[] }) {
   const data = [...reviews].slice(0, 12).reverse().map((r, i) => ({ n: i + 1, score: r.score }));
-  if (data.length < 2) return <div className="section-sub">Run at least two reviews — or generate the demo dataset — to see the trend.</div>;
+  if (data.length < 2) return <div className="section-sub">Run at least two reviews to see the trend.</div>;
   return (
     <ResponsiveContainer width="100%" height={132}>
       <AreaChart data={data} margin={{ top: 8, right: 8, left: -22, bottom: 0 }}>

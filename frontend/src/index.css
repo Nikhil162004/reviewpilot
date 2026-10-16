@@ -631,3 +631,17 @@ h1, h2, .landing-hero h1, .page-head h2, .review-head h2, .wt-title, .brand-name
   .landing-hero h1 { font-size: 38px; }
   .topbar-actions .status-dot { display: none; }
 }
+
+/* v9: issue-card readability + calmer workspace density (QA-driven) */
+.issue-msg strong { display: block; color: var(--accent); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; margin: 6px 0 2px; }
+.issue-msg { line-height: 1.55; }
+.walk-sec { margin-top: 14px; }
+
+/* v9b: quiet depth so panels read as surfaces, not one flat sheet */
+.main { background: #0D1017; }
+.center-pane { background: #0B0E13; }
+.report-head, .walk, .card { border: 1px solid #1D2431; box-shadow: 0 1px 2px rgba(0,0,0,.45), 0 10px 28px rgba(0,0,0,.28); }
+.explorer, .right-panel { background: #08090F; }
+.issue-card { border-bottom: 1px solid #1A2130; }
+.topbar { box-shadow: 0 1px 0 #1D2431; }
+.landing-nav a, .landing-nav button { white-space: nowrap; }

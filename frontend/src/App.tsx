@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { copyText } from "./lib/clipboard";
 import Editor from "@monaco-editor/react";
 import { CategoryBars, ScoreTrend, SeverityDonut, TopRules, estimatedEffort, qualityGate } from "./components/Charts";
 import CommandPalette, { type PaletteAction } from "./components/CommandPalette";
@@ -9,15 +10,14 @@ import Walkthrough from "./components/Walkthrough";
 import SyntaxEditor from "./components/SyntaxEditor";
 import { api, clearSession, getUser, setSession } from "./lib/api";
 import Landing from "./components/Landing";
-import AdminPanel from "./components/AdminPanel";
 import { explainLine } from "./lib/explain";
 import { SAMPLE_CLEAN, SAMPLE_CODE, SAMPLE_DIFF, SAMPLE_JS } from "./lib/sample";
 import type { DashboardStats, Issue, ReviewResult } from "./lib/types";
 
-type View = "landing" | "workspace" | "dashboard" | "history" | "how" | "settings" | "admin" | "compare" | "notfound";
+type View = "landing" | "workspace" | "dashboard" | "history" | "how" | "settings" | "compare" | "notfound";
 type InputMode = "code" | "diff" | "github";
 type CenterMode = "editor" | "report";
-type RightTab = "issues" | "chat" | "metrics" | "team";
+type RightTab = "issues" | "chat" | "metrics";
 
 interface ChatMessage { role: "user" | "assistant"; text: string }
 interface PrItem { number: number; title: string; author: string; url: string; updated_at: string }
@@ -109,11 +109,6 @@ export default function App() {
   const [historyQuery, setHistoryQuery] = useState("");
   const [historyFilter, setHistoryFilter] = useState("all");
   const [compareIds, setCompareIds] = useState<string[]>([]);
-  const [teamMembers, setTeamMembers] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("rp_team") || "[]"); } catch { return []; } });
-  const [newMember, setNewMember] = useState("");
-  const [assignments, setAssignments] = useState<Record<string, string>>(() => { try { return JSON.parse(localStorage.getItem("rp_assign") || "{}"); } catch { return {}; } });
-  const [issueComment, setIssueComment] = useState("");
-  const [issueComments, setIssueComments] = useState<Record<string, string[]>>(() => { try { return JSON.parse(localStorage.getItem("rp_comments") || "{}"); } catch { return {}; } });
   const [explained, setExplained] = useState<{ line: number; text: string } | null>(null);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [history, setHistory] = useState<ReviewResult[]>([]);
@@ -135,7 +130,7 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [logs, setLogs] = useState<string[]>(["[engine] PR Review Assistant ready — 19 rules loaded, AST checks enabled"]);
+  const [logs, setLogs] = useState<string[]>(["[engine] ReviewPilot ready — 19 rules loaded, AST checks enabled"]);
   const [fixNotice, setFixNotice] = useState<string | null>(null);
   const [chat, setChat] = useState<ChatMessage[]>([
     { role: "assistant", text: "I am your review assistant. Run a review, then ask me to explain any finding, suggest a fix, or judge whether this code is safe to merge." },
@@ -144,7 +139,6 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [fixDelta, setFixDelta] = useState<{ before: number; after: number; count: number } | null>(null);
-  const [seeding, setSeeding] = useState(false);
   const toastTimer = useRef<number | undefined>(undefined);
   const runReviewRef = useRef<() => Promise<ReviewResult | null>>(async () => null);
   const autoRanRef = useRef(false);
@@ -199,13 +193,20 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Open alive, not empty: analyze the default workspace file once on launch.
+  // Open alive, not empty: when the workspace is first entered, show the
+  // latest stored review if one exists instead of creating a new one per load.
   useEffect(() => {
-    if (autoRanRef.current) return;
+    if (view !== "workspace" || autoRanRef.current) return;
     autoRanRef.current = true;
-    void runReviewRef.current();
+    (async () => {
+      try {
+        const existing = await api.listReviews();
+        if (existing.length) { openReview(existing[0]); return; }
+      } catch { /* fall through to a fresh review */ }
+      await runReviewRef.current();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [view]);
 
   // Paint VS Code-style problem markers into Monaco from the latest review.
   useEffect(() => {
@@ -232,6 +233,7 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPaletteOpen((v) => !v); }
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && view === "workspace") { e.preventDefault(); void runReviewRef.current(); }
+      if (e.key === "Escape") { setPaletteOpen(false); setGeneratedTests(null); setGhPostOpen(false); setAuthOpen(false); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -426,7 +428,8 @@ export default function App() {
   const copyShareLink = async () => {
     if (!current) return;
     const link = `${window.location.origin}${window.location.pathname}?share=${current.id}`;
-    await navigator.clipboard.writeText(link);
+    const copied = await copyText(link);
+    showToast(copied ? "Share link copied to clipboard" : `Share link: ${link}`);
     showToast("Share link copied — anyone with it can view this report");
   };
 
@@ -457,20 +460,6 @@ export default function App() {
     showToast("Project report downloaded (Markdown — paste into Word/IEEE template)");
   };
 
-  const seedDemo = async () => {
-    setSeeding(true);
-    try {
-      await api.reviewCode(SAMPLE_CODE, "app.py", "Demo · vulnerable service");
-      await api.reviewCode(SAMPLE_CLEAN, "clean_utils.py", "Demo · clean utilities");
-      await api.reviewCode(SAMPLE_JS, "server.js", "Demo · express API");
-      await api.reviewCode(SAMPLE_CODE.replace("process_orders", "process_payments"), "payments.py", "Demo · payments module");
-      await refresh();
-      showToast("Demo dataset generated — 4 real reviews analyzed and stored");
-      pushLog("demo dataset generated (4 reviews)");
-    } catch {
-      showToast("Could not generate demo data — is the API running?");
-    } finally { setSeeding(false); }
-  };
 
   const paletteActions: PaletteAction[] = [
     { id: "run", label: "Run review", hint: "Ctrl+Enter", run: () => { setView("workspace"); void runReview(); } },
@@ -478,7 +467,6 @@ export default function App() {
     { id: "dash", label: "Go to dashboard", hint: "View", run: () => setView("dashboard") },
     { id: "workspace", label: "Go to review workspace", hint: "View", run: () => setView("workspace") },
     { id: "history", label: "Go to review history", hint: "View", run: () => setView("history") },
-    { id: "seed", label: "Generate demo dataset", hint: "Data", run: () => void seedDemo() },
     ...SAMPLE_FILES.map((f) => ({
       id: `file-${f.name}`, label: `Open ${f.label}`, hint: "Workspace file",
       run: () => { setView("workspace"); setCode(f.code); setFilename(f.filename); setActiveSample(f.name); setMode("code"); setCenterMode("editor"); },
@@ -552,7 +540,7 @@ export default function App() {
             <p className="section-sub" style={{ marginBottom: 12 }}>Starter tests generated from your code structure. Fill in real inputs before trusting them.</p>
             <pre className="modal-code">{generatedTests.code}</pre>
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              <button className="btn btn-accent" onClick={() => navigator.clipboard.writeText(generatedTests.code)}>Copy tests</button>
+              <button className="btn btn-accent" onClick={async () => showToast((await copyText(generatedTests.code)) ? "Tests copied to clipboard" : "Copy failed — select the code manually")}>Copy tests</button>
               <button className="btn btn-ghost" onClick={() => setGeneratedTests(null)}>Close</button>
             </div>
           </div>
@@ -578,7 +566,6 @@ export default function App() {
         {navItem("history", "HS", "History")}
         {navItem("how", "GD", "Guide")}
         {navItem("settings", "ST", "Settings")}
-        {navItem("admin", "AD", "Admin")}
         <button className="activity-btn" onClick={() => setPaletteOpen(true)} title="Command palette (Ctrl+K)">
           <span className="activity-icon"></span><span className="activity-label">Search</span>
         </button>
@@ -648,9 +635,9 @@ export default function App() {
           <>
             <div className="modebar">
               <div className="tabs">
-                <button className={`tab ${mode === "code" ? "active" : ""}`} onClick={() => setMode("code")}>Code</button>
-                <button className={`tab ${mode === "diff" ? "active" : ""}`} onClick={() => setMode("diff")}>Git diff</button>
-                <button className={`tab ${mode === "github" ? "active" : ""}`} onClick={() => setMode("github")}> GitHub PR</button>
+                <button className={`tab ${mode === "code" ? "active" : ""}`} onClick={() => { setMode("code"); setCenterMode("editor"); }}>Code</button>
+                <button className={`tab ${mode === "diff" ? "active" : ""}`} onClick={() => { setMode("diff"); setCenterMode("editor"); }}>Git diff</button>
+                <button className={`tab ${mode === "github" ? "active" : ""}`} onClick={() => { setMode("github"); setCenterMode("editor"); }}> GitHub PR</button>
               </div>
               <div className="tabs">
                 <button className={`tab ${centerMode === "editor" ? "active" : ""}`} onClick={() => setCenterMode("editor")}>Editor</button>
@@ -660,7 +647,7 @@ export default function App() {
               <input className="filename-input mono" value={filename} onChange={(e) => setFilename(e.target.value)} aria-label="Filename" />
             </div>
 
-            {current && (
+            {current && centerMode === "editor" && (
               <div className="kpi-strip">
                 <div className="kpi-card"><span className="kpi-label">Health score</span><strong className={current.score >= 75 ? "kpi-good" : current.score >= 50 ? "kpi-mid" : "kpi-bad"}>{current.score}<small>/100 · {current.grade}</small></strong></div>
                 <div className="kpi-card"><span className="kpi-label">Open issues</span><strong>{current.issues.length}<small>{current.stats.critical ?? 0} critical</small></strong></div>
@@ -712,7 +699,7 @@ export default function App() {
                         onMount={(editor, monaco) => { editorRef.current = editor; monacoRef.current = monaco; }}
                         onChange={(v) => setCode(v ?? "")}
                         options={{
-                          minimap: { enabled: true, maxColumn: 60 },
+                          minimap: { enabled: false },
                           fontFamily: "'JetBrains Mono', ui-monospace, monospace",
                           fontSize: 13, lineHeight: 1.7, padding: { top: 12 },
                           scrollBeyondLastLine: false, automaticLayout: true,
@@ -806,7 +793,6 @@ export default function App() {
                   <button className={rightTab === "issues" ? "active" : ""} onClick={() => setRightTab("issues")}> Issues{current ? ` (${current.issues.length})` : ""}</button>
                   <button className={rightTab === "chat" ? "active" : ""} onClick={() => setRightTab("chat")}> AI Assistant</button>
                   <button className={rightTab === "metrics" ? "active" : ""} onClick={() => setRightTab("metrics")}> Metrics</button>
-                  <button className={rightTab === "team" ? "active" : ""} onClick={() => setRightTab("team")}> Team</button>
                 </div>
                 {rightTab === "issues" && (
                   current
@@ -860,32 +846,6 @@ export default function App() {
                     </div>
                   ) : <div className="empty"><strong>No metrics yet</strong>Metrics are computed per review.</div>
                 )}
-                {rightTab === "team" && (
-                  <div style={{ padding: 16 }}>
-                    <div className="section-title">Team</div>
-                    <p className="section-sub" style={{ marginBottom: 12 }}>Invite members, assign the selected issue, discuss it here. Stored locally in this browser.</p>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                      <input className="team-input" value={newMember} onChange={(e) => setNewMember(e.target.value)} placeholder="teammate@example.com" />
-                      <button className="btn btn-accent btn-small" onClick={() => { if (!newMember.trim()) return; const next = [...teamMembers, newMember.trim()]; setTeamMembers(next); localStorage.setItem("rp_team", JSON.stringify(next)); setNewMember(""); }}>Invite</button>
-                    </div>
-                    {teamMembers.map((m) => <div key={m} className="team-member"><span className="avatar avatar-small">{m.slice(0, 2).toUpperCase()}</span>{m}</div>)}
-                    {selectedIssue ? (
-                      <div style={{ marginTop: 16 }}>
-                        <div className="section-title" style={{ fontSize: 12.5 }}>Selected issue</div>
-                        <p className="section-sub">{selectedIssue.rule_id} — {selectedIssue.title}</p>
-                        <select className="team-input" style={{ width: "100%", marginTop: 8 }} value={assignments[selectedIssue.id] ?? ""} onChange={(e) => { const next = { ...assignments, [selectedIssue.id]: e.target.value }; setAssignments(next); localStorage.setItem("rp_assign", JSON.stringify(next)); }}>
-                          <option value="">Assign to...</option>
-                          {teamMembers.map((m) => <option key={m} value={m}>{m}</option>)}
-                        </select>
-                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                          <input className="team-input" style={{ flex: 1 }} value={issueComment} onChange={(e) => setIssueComment(e.target.value)} placeholder="Add a comment..." />
-                          <button className="btn btn-ghost btn-small" onClick={() => { if (!issueComment.trim()) return; const next = { ...issueComments, [selectedIssue.id]: [...(issueComments[selectedIssue.id] ?? []), issueComment.trim()] }; setIssueComments(next); localStorage.setItem("rp_comments", JSON.stringify(next)); setIssueComment(""); }}>Post</button>
-                        </div>
-                        {(issueComments[selectedIssue.id] ?? []).map((c, i) => <div key={i} className="team-comment">{c}</div>)}
-                      </div>
-                    ) : <p className="section-sub" style={{ marginTop: 14 }}>Select an issue to assign or discuss it.</p>}
-                  </div>
-                )}
               </aside>
             </div>
 
@@ -903,7 +863,6 @@ export default function App() {
             <div className="page-head">
               <div><h2>Code review overview</h2><p>Deterministic analysis — reproducible, explainable, and scored. No black box.</p></div>
               <div className="spacer" />
-              <button className="btn btn-ghost" onClick={seedDemo} disabled={seeding}> {seeding ? "Generating…" : "Generate demo dataset"}</button>
               <button className="btn btn-accent" onClick={() => setView("workspace")}>Open review workspace</button>
             </div>
             <div className="stats-grid">
@@ -1024,7 +983,7 @@ export default function App() {
                 </div>
                 <div className="field"><label>API key</label><input type="password" value={llmKey} onChange={(e) => { setLlmKey(e.target.value); localStorage.setItem("rp_llm_key", e.target.value); }} placeholder="Paste your free API key" /></div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button className="btn btn-ghost" onClick={() => showToast(llmKey ? "Settings saved in this browser" : "Add an API key first, then save")}>Save settings</button>
+                  <button className="btn btn-ghost" onClick={() => showToast("Settings saved in this browser")}>Save settings</button>
                   <button className="btn btn-accent" onClick={runDeepReview} disabled={deepLoading}>{deepLoading ? "Reviewing..." : "Run deep AI review on current code"}</button>
                 </div>
                 {deepReview && <pre className="deep-text" style={{ marginTop: 14 }}>{deepReview}</pre>}
@@ -1043,14 +1002,6 @@ export default function App() {
                 <button className="btn btn-accent" onClick={generateProjectReport}>Generate project report (.md)</button>
               </div>
             </div>
-          </div>
-        )}
-
-        {view === "admin" && (
-          <div className="content">
-            <div className="page-head"><div><h2>Admin analytics</h2><p>Platform-wide usage across all stored reviews.</p></div>
-              <div className="spacer" /><button className="btn btn-ghost" onClick={refresh}>Refresh</button></div>
-            <AdminPanel />
           </div>
         )}
 
