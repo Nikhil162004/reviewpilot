@@ -16,7 +16,9 @@ import time
 import uuid
 from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parents[2] / "data" / "reviews.db"
+# DATABASE_PATH lets hosts with a persistent disk (e.g. Render) keep the
+# SQLite file across deploys; locally it stays in backend/data/.
+DB_PATH = Path(os.environ.get("DATABASE_PATH", Path(__file__).resolve().parents[2] / "data" / "reviews.db"))
 SECRET = os.environ.get("APP_SECRET", "dev-only-secret-change-me").encode()
 TOKEN_TTL_SECONDS = 7 * 24 * 3600
 

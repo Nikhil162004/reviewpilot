@@ -1,0 +1,49 @@
+services:
+  # ---- API: FastAPI + SQLite ---------------------------------------------
+  - type: web
+    name: reviewpilot-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.0
+      # Signs auth tokens. Render generates a strong random value for you.
+      - key: APP_SECRET
+        generateValue: true
+      # Keep the interactive API docs off in production.
+      - key: APP_DEBUG
+        value: "false"
+      # Optional: set if you use the GitHub webhook (Settings -> Webhooks).
+      - key: WEBHOOK_SECRET
+        sync: false
+      # Optional: only needed if you want a server-side LLM key fallback.
+      - key: GROQ_API_KEY
+        sync: false
+    # Free tier has no persistent disk, so SQLite lives on ephemeral storage
+    # and resets on redeploy. For permanent history attach a paid disk,
+    # mount it at /var/data and set: DATABASE_PATH=/var/data/reviews.db
+
+  # ---- Website: React static site ----------------------------------------
+  - type: web
+    name: reviewpilot-web
+    runtime: static
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    routes:
+      # Same-origin API calls: the browser never talks to the API domain
+      # directly, so there are no CORS issues in production.
+      - type: rewrite
+        source: /api/*
+        destination: https://reviewpilot-api.onrender.com/api/*
+      # SPA fallback: let the app render its own views (and custom 404).
+      - type: rewrite
+        source: /*
+        destination: /index.html

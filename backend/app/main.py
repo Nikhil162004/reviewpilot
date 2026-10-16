@@ -40,7 +40,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
-    allow_origin_regex=r"https://.*\.e2b\.app",
+    allow_origin_regex=r"https://.*\.(e2b\.app|onrender\.com)",
     allow_methods=["GET", "POST"],
     allow_headers=["Authorization", "Content-Type", "X-Hub-Signature-256", "X-GitHub-Event"],
     allow_credentials=False,
