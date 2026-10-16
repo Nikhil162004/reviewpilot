@@ -207,8 +207,40 @@ def _grade(score: int) -> str:
     return "A" if score >= 90 else "B" if score >= 75 else "C" if score >= 60 else "D" if score >= 40 else "F"
 
 
+def _compute_metrics(file_contents: list[FileContent]) -> dict[str, float]:
+    total = blank = comments = functions = branches = 0
+    branch_re = re.compile(r"\b(if|elif|for|while|except|with|and|or|case)\b")
+    function_re = re.compile(r"^\s*(def |async def |function |func |const \w+ = \(|.*=>)")
+    for fc in file_contents:
+        for line in fc.lines:
+            if line.kind == "removed":
+                continue
+            total += 1
+            text = line.content.strip()
+            if not text:
+                blank += 1
+            elif text.startswith(("#", "//", "/*", "*")):
+                comments += 1
+            if function_re.match(line.content):
+                functions += 1
+            branches += len(branch_re.findall(line.content))
+    return {
+        "total_lines": total,
+        "blank_lines": blank,
+        "comment_lines": comments,
+        "comment_ratio": round((comments / total * 100) if total else 0, 1),
+        "function_count": functions,
+        "cyclomatic_complexity": 1 + branches,
+        "avg_line_length": 0,  # filled below for readability in payloads
+    }
+
+
 def _build_result(title, source, file_contents, issues, lines_added_by_file) -> ReviewResult:
     score = max(0, 100 - sum(SEVERITY_PENALTY[i.severity] for i in issues))
+    category_scores: dict[str, int] = {}
+    for category in Category:
+        penalty = sum(SEVERITY_PENALTY[i.severity] for i in issues if i.category == category)
+        category_scores[category.value] = max(0, 100 - penalty)
     counts: dict[str, int] = {s.value: 0 for s in Severity}
     for issue in issues:
         counts[issue.severity.value] += 1
@@ -244,6 +276,8 @@ def _build_result(title, source, file_contents, issues, lines_added_by_file) -> 
             "files_changed": len(files),
             "lines_added": sum(f.lines_added for f in files),
         },
+        category_scores=category_scores,
+        metrics=_compute_metrics(file_contents),
     )
 
 

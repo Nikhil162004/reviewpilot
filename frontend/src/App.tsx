@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { CategoryBars, ScoreTrend, SeverityDonut, TopRules } from "./components/Charts";
+import CodeEditor from "./components/CodeEditor";
 import CodeViewer from "./components/CodeViewer";
 import IssuePanel from "./components/IssuePanel";
 import ScoreRing from "./components/ScoreRing";
@@ -154,6 +156,12 @@ export default function App() {
                 <div className="card stat-card"><div className="stat-label">Files analyzed</div><div className="stat-value">{stats?.files_analyzed ?? 0}</div><div className="stat-hint">Across all reviews</div></div>
               </div>
 
+              <div className="analytics-grid">
+                <div className="card card-pad"><div className="section-title">Issue severity mix</div><div className="section-sub" style={{ marginBottom: 12 }}>Across all stored reviews</div><SeverityDonut reviews={history} /></div>
+                <div className="card card-pad"><div className="section-title">Score trend</div><div className="section-sub" style={{ marginBottom: 12 }}>Latest review scores</div><ScoreTrend reviews={history} /></div>
+                <div className="card card-pad"><div className="section-title">Most triggered rules</div><div className="section-sub" style={{ marginBottom: 12 }}>Where your code fails most</div><TopRules reviews={history} /></div>
+              </div>
+
               <div className="card">
                 <div className="card-pad" style={{ paddingBottom: 8 }}>
                   <div className="section-title">Recent reviews</div>
@@ -203,7 +211,7 @@ export default function App() {
                       <div className="field"><label>Filename (sets language rules)</label><input type="text" value={filename} onChange={(e) => setFilename(e.target.value)} placeholder="app.py" /></div>
                       <div className="field"><label>Try it instantly</label><button className="btn btn-ghost" onClick={() => { setCode(SAMPLE_CODE); setFilename("app.py"); }}>Load sample vulnerable code</button></div>
                     </div>
-                    <textarea className="code-input" value={code} onChange={(e) => setCode(e.target.value)} placeholder={"Paste Python, JavaScript, TypeScript, Java, Go, Ruby or PHP code here…"} spellCheck={false} />
+                    <CodeEditor value={code} onChange={setCode} placeholder={"Paste Python, JavaScript, TypeScript, Java, Go, Ruby or PHP code here…"} />
                   </>
                 )}
                 {mode === "diff" && (
@@ -274,11 +282,40 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="detail-grid">
+              {current.metrics && (
+                <div className="metrics-strip">
+                  <div className="card metric-card"><div className="metric-label">Lines analyzed</div><div className="metric-value">{current.metrics.total_lines ?? "—"}</div></div>
+                  <div className="card metric-card"><div className="metric-label">Functions</div><div className="metric-value">{current.metrics.function_count ?? "—"}</div></div>
+                  <div className="card metric-card"><div className="metric-label">Cyclomatic complexity</div><div className="metric-value">{current.metrics.cyclomatic_complexity ?? "—"}</div></div>
+                  <div className="card metric-card"><div className="metric-label">Comment ratio</div><div className="metric-value">{current.metrics.comment_ratio ?? 0}%</div></div>
+                  <div className="card metric-card"><div className="metric-label">Issues / 100 lines</div><div className="metric-value">{current.metrics.total_lines ? ((current.issues.length / current.metrics.total_lines) * 100).toFixed(1) : "0"}</div></div>
+                </div>
+              )}
+
+              <div className="detail-grid-3">
+                <div>
+                  <div className="card file-tree" style={{ marginBottom: 16 }}>
+                    <div className="section-title" style={{ padding: "6px 10px" }}>Files changed</div>
+                    {current.files.map((f) => (
+                      <button key={f.path} className="file-tree-item" onClick={() => document.getElementById(`file-${f.path}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.path.split("/").pop()}</span>
+                        <span className={`file-count ${f.issue_count === 0 ? "clean" : ""}`}>{f.issue_count}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {current.category_scores && (
+                    <div className="card card-pad">
+                      <div className="section-title" style={{ marginBottom: 14 }}>Category scores</div>
+                      <CategoryBars scores={current.category_scores} />
+                    </div>
+                  )}
+                </div>
                 <div>
                   {current.file_contents.map((file) => (
-                    <CodeViewer key={file.path} file={file} issues={current.issues}
-                      selectedIssueId={selectedIssue?.id ?? null} onSelectIssue={setSelectedIssue} />
+                    <div key={file.path} id={`file-${file.path}`}>
+                      <CodeViewer file={file} issues={current.issues}
+                        selectedIssueId={selectedIssue?.id ?? null} onSelectIssue={setSelectedIssue} />
+                    </div>
                   ))}
                 </div>
                 <IssuePanel issues={current.issues} selectedIssueId={selectedIssue?.id ?? null} onSelectIssue={setSelectedIssue} />

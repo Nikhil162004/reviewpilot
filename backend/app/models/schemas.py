@@ -65,6 +65,8 @@ class ReviewResult(BaseModel):
     file_contents: list[FileContent]
     issues: list[Issue]
     stats: dict[str, int]
+    category_scores: dict[str, int] = {}
+    metrics: dict[str, float] = {}
 
 
 class CodeReviewRequest(BaseModel):

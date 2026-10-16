@@ -34,3 +34,11 @@ def test_syntax_error_is_reported():
 def test_score_never_negative():
     code = "\n".join('password = "[SECURITY_DATA]"' for _ in range(30))
     assert analyze_code(code, "bad.py", "bad").score == 0
+
+
+def test_category_scores_and_metrics_present():
+    result = analyze_code('api_key = "[SECURITY_DATA]"\n# comment\n\ndef f():\n    if True:\n        return 1\n', "app.py", "metrics")
+    assert result.category_scores["security"] < 100
+    assert result.category_scores["style"] == 100
+    assert result.metrics["total_lines"] == 6
+    assert result.metrics["cyclomatic_complexity"] >= 2

@@ -47,6 +47,8 @@ export interface ReviewResult {
   file_contents: FileContent[];
   issues: Issue[];
   stats: Record<string, number>;
+  category_scores?: Record<string, number>;
+  metrics?: Record<string, number>;
 }
 
 export interface DashboardStats {
