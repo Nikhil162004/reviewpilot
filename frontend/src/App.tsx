@@ -118,6 +118,11 @@ export default function App() {
   const [seeding, setSeeding] = useState(false);
   const toastTimer = useRef<number | undefined>(undefined);
   const runReviewRef = useRef<() => Promise<ReviewResult | null>>(async () => null);
+  const autoRanRef = useRef(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const editorRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const monacoRef = useRef<any>(null);
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -133,6 +138,35 @@ export default function App() {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  // Open alive, not empty: analyze the default workspace file once on launch.
+  useEffect(() => {
+    if (autoRanRef.current) return;
+    autoRanRef.current = true;
+    void runReviewRef.current();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Paint VS Code-style problem markers into Monaco from the latest review.
+  useEffect(() => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco || !current) return;
+    const model = editor.getModel();
+    if (!model) return;
+    const markers = current.issues
+      .filter((i) => i.file === filename)
+      .map((i) => ({
+        severity: i.severity === "critical" || i.severity === "high"
+          ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
+        message: `${i.rule_id} ${i.title} — ${i.message}`,
+        startLineNumber: Math.min(Math.max(i.line, 1), model.getLineCount()),
+        startColumn: 1,
+        endLineNumber: Math.min(Math.max(i.line, 1), model.getLineCount()),
+        endColumn: model.getLineMaxColumn(Math.min(Math.max(i.line, 1), model.getLineCount())),
+      }));
+    monaco.editor.setModelMarkers(model, "pr-review", markers);
+  }, [current, filename, centerMode]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -292,6 +326,21 @@ export default function App() {
     })),
   ];
 
+  const handleSelectIssue = (issue: Issue) => {
+    setSelectedIssue(issue);
+    if (issue.file === filename) {
+      setCenterMode("editor");
+      requestAnimationFrame(() => {
+        const editor = editorRef.current;
+        if (editor) {
+          editor.revealLineInCenter(issue.line);
+          editor.setPosition({ lineNumber: issue.line, column: 1 });
+          editor.focus();
+        }
+      });
+    }
+  };
+
   const severityTotal = current?.issues.length || 1;
 
   const navItem = (v: View, icon: ReactNode, label: string) => (
@@ -379,6 +428,15 @@ export default function App() {
               <input className="filename-input mono" value={filename} onChange={(e) => setFilename(e.target.value)} aria-label="Filename" />
             </div>
 
+            {current && (
+              <div className="kpi-strip">
+                <div className="kpi-card"><span className="kpi-label">Health score</span><strong className={current.score >= 75 ? "kpi-good" : current.score >= 50 ? "kpi-mid" : "kpi-bad"}>{current.score}<small>/100 · {current.grade}</small></strong></div>
+                <div className="kpi-card"><span className="kpi-label">Open issues</span><strong>{current.issues.length}<small>{current.stats.critical ?? 0} critical</small></strong></div>
+                <div className="kpi-card"><span className="kpi-label">Quality gate</span><strong className={qualityGate(current).passed ? "kpi-good" : "kpi-bad"}>{qualityGate(current).passed ? "PASSED" : "FAILED"}<small>{estimatedEffort(current)} to fix</small></strong></div>
+                <div className="kpi-card"><span className="kpi-label">Complexity</span><strong>{current.metrics?.cyclomatic_complexity ?? "—"}<small>{current.metrics?.total_lines ?? 0} lines · {current.metrics?.function_count ?? 0} functions</small></strong></div>
+              </div>
+            )}
+
             {error && <div className="error-box" style={{ margin: "14px 18px 0" }}>{error}</div>}
             {fixNotice && <div className="notice-box" style={{ margin: "14px 18px 0" }}>⚡ {fixNotice}</div>}
 
@@ -419,6 +477,7 @@ export default function App() {
                         value={code}
                         language={monacoLanguage(filename)}
                         theme="vs-dark"
+                        onMount={(editor, monaco) => { editorRef.current = editor; monacoRef.current = monaco; }}
                         onChange={(v) => setCode(v ?? "")}
                         options={{
                           minimap: { enabled: true, maxColumn: 60 },
@@ -493,7 +552,7 @@ export default function App() {
                 </div>
                 {rightTab === "issues" && (
                   current
-                    ? <IssuePanel issues={current.issues} selectedIssueId={selectedIssue?.id ?? null} onSelectIssue={setSelectedIssue} />
+                    ? <IssuePanel issues={current.issues} selectedIssueId={selectedIssue?.id ?? null} onSelectIssue={handleSelectIssue} />
                     : <div className="empty"><strong>No issues yet</strong>Run a review — findings appear here, ranked critical → low.</div>
                 )}
                 {rightTab === "chat" && (

@@ -422,3 +422,21 @@ body { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-s
 .stat-card:hover, .how-card:hover { transform: translateY(-2px); border-color: rgba(45,212,191,0.45); }
 .btn { transition: transform 0.12s ease, filter 0.15s ease, background 0.15s ease; }
 .btn:active { transform: scale(0.98); }
+
+/* ================= v5: alive first screen ================= */
+.kpi-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 14px 18px 0; }
+.kpi-card {
+  background: linear-gradient(160deg, rgba(45,212,191,0.09), rgba(255,255,255,0.02) 55%), var(--surface);
+  border: 1px solid var(--border); border-radius: 12px; padding: 13px 16px;
+  display: flex; flex-direction: column; gap: 3px; box-shadow: 0 8px 24px rgba(0,0,0,0.28);
+}
+.kpi-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-3); font-weight: 700; }
+.kpi-card strong { font-size: 21px; font-weight: 800; letter-spacing: -0.02em; display: flex; gap: 8px; align-items: baseline; font-variant-numeric: tabular-nums; }
+.kpi-card strong small { font-size: 11px; color: var(--text-3); font-weight: 600; letter-spacing: 0; }
+.kpi-good { color: #3fb950; } .kpi-mid { color: #d29922; } .kpi-bad { color: #f85149; }
+.explorer-file { border: 1px solid transparent; }
+.explorer-file.active { border-color: rgba(45,212,191,0.35); }
+.righttabs button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.modebar .tab { display: inline-flex; align-items: center; gap: 6px; }
+.review-head { border-top: 3px solid rgba(45,212,191,0.55); }
+@media (max-width: 900px) { .kpi-strip { grid-template-columns: 1fr 1fr; } }
