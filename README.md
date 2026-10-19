@@ -1,4 +1,6 @@
-# PR Review Assistant — Automated Code Review
+# ReviewPilot — Automated Code Review
+
+**🌐 Live demo: https://reviewpilot-web-qxjw.onrender.com** · API: https://reviewpilot-api-njpa.onrender.com/api/health
 
 An automated code-review system that analyzes pasted code, git diffs, and public GitHub pull requests, then produces a scored, severity-ranked report with inline findings and suggested fixes.
 
